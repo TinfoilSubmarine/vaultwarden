@@ -619,7 +619,7 @@ pub fn get_reqwest_client() -> Client {
     match get_reqwest_client_builder().build() {
         Ok(client) => client,
         Err(e) => {
-            error!("Possible trust-dns error, trying with trust-dns disabled: '{e}'");
+            error!("Possible trust-dns error, trying with trust-dns disabled: '{}'", e);
             get_reqwest_client_builder().trust_dns(false).build().expect("Failed to build client")
         }
     }

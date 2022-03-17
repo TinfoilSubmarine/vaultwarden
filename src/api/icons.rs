@@ -60,7 +60,7 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
     match client.build() {
         Ok(client) => client,
         Err(e) => {
-            error!("Possible trust-dns error, trying with trust-dns disabled: '{e}'");
+            error!("Possible trust-dns error, trying with trust-dns disabled: '{}'", e);
             get_reqwest_client_builder()
                 .cookie_provider(cookie_store)
                 .timeout(Duration::from_secs(CONFIG.icon_download_timeout()))
@@ -454,7 +454,7 @@ async fn get_favicons_node(
                     }
                 } else if tag.name == TAG_BASE && tag.attributes.contains_key(ATTR_HREF) {
                     let href = std::str::from_utf8(tag.attributes.get(ATTR_HREF).unwrap()).unwrap_or_default();
-                    debug!("Found base href: {href}");
+                    debug!("Found base href: {}", href);
                     base_url = match base_url.join(href) {
                         Ok(inner_url) => inner_url,
                         _ => url.clone(),
@@ -503,8 +503,8 @@ struct IconUrlResult {
 /// ```
 async fn get_icon_url(domain: &str) -> Result<IconUrlResult, Error> {
     // Default URL with secure and insecure schemes
-    let ssldomain = format!("https://{domain}");
-    let httpdomain = format!("http://{domain}");
+    let ssldomain = format!("https://{}", domain);
+    let httpdomain = format!("http://{}", domain);
 
     // First check the domain as given during the request for both HTTPS and HTTP.
     let resp = match get_page(&ssldomain).or_else(|_| get_page(&httpdomain)).await {
@@ -522,20 +522,20 @@ async fn get_icon_url(domain: &str) -> Result<IconUrlResult, Error> {
                     base = domain_parts.next_back().unwrap()
                 );
                 if is_valid_domain(&base_domain).await {
-                    let sslbase = format!("https://{base_domain}");
-                    let httpbase = format!("http://{base_domain}");
-                    debug!("[get_icon_url]: Trying without subdomains '{base_domain}'");
+                    let sslbase = format!("https://{}", base_domain);
+                    let httpbase = format!("http://{}", base_domain);
+                    debug!("[get_icon_url]: Trying without subdomains '{}'", base_domain);
 
                     sub_resp = get_page(&sslbase).or_else(|_| get_page(&httpbase)).await;
                 }
 
             // When the domain is not an IP, and has less then 2 dots, try to add www. infront of it.
             } else if is_ip.is_err() && domain.matches('.').count() < 2 {
-                let www_domain = format!("www.{domain}");
+                let www_domain = format!("www.{}", domain);
                 if is_valid_domain(&www_domain).await {
-                    let sslwww = format!("https://{www_domain}");
-                    let httpwww = format!("http://{www_domain}");
-                    debug!("[get_icon_url]: Trying with www. prefix '{www_domain}'");
+                    let sslwww = format!("https://{}", www_domain);
+                    let httpwww = format!("http://{}", www_domain);
+                    debug!("[get_icon_url]: Trying with www. prefix '{}'", www_domain);
 
                     sub_resp = get_page(&sslwww).or_else(|_| get_page(&httpwww)).await;
                 }
@@ -567,10 +567,10 @@ async fn get_icon_url(domain: &str) -> Result<IconUrlResult, Error> {
         get_favicons_node(dom, &mut iconlist, &url).await;
     } else {
         // Add the default favicon.ico to the list with just the given domain
-        iconlist.push(Icon::new(35, format!("{ssldomain}/favicon.ico")));
-        iconlist.push(Icon::new(40, format!("{ssldomain}/apple-touch-icon.png")));
-        iconlist.push(Icon::new(35, format!("{httpdomain}/favicon.ico")));
-        iconlist.push(Icon::new(40, format!("{httpdomain}/apple-touch-icon.png")));
+        iconlist.push(Icon::new(35, format!("{}/favicon.ico", ssldomain)));
+        iconlist.push(Icon::new(40, format!("{}/apple-touch-icon.png", ssldomain)));
+        iconlist.push(Icon::new(35, format!("{}/favicon.ico", httpdomain)));
+        iconlist.push(Icon::new(40, format!("{}/apple-touch-icon.png", httpdomain)));
     }
 
     // Sort the iconlist by priority

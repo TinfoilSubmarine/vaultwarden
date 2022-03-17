@@ -3,7 +3,7 @@ name = "vaultwarden"
 version = "1.0.0"
 authors = ["Daniel García <dani-garcia@users.noreply.github.com>"]
 edition = "2021"
-rust-version = "1.59"
+rust-version = "1.57"
 resolver = "2"
 
 repository = "https://github.com/dani-garcia/vaultwarden"
@@ -152,5 +152,4 @@ job_scheduler = { git = 'https://github.com/jjlin/job_scheduler', rev = 'ee02341
 # Strip debuginfo from the release builds
 # Also enable thin LTO for some optimizations
 [profile.release]
-strip = "debuginfo"
 lto = "thin"

@@ -13,7 +13,8 @@ use reqwest::{
     header::{self, HeaderMap, HeaderValue},
     Client, Response,
 };
-use rocket::{http::ContentType, response::Redirect, Route};
+use rocket::response::Redirect;
+use mime::Mime;
 use axum::{
     Router,
     routing::get,
@@ -121,13 +122,13 @@ async fn icon_google(domain: String) -> Option<Redirect> {
     icon_redirect(&domain, "https://www.google.com/s2/favicons?domain={}&sz=32").await
 }
 
-async fn icon_internal(domain: String) -> Cached<(ContentType, Vec<u8>)> {
+async fn icon_internal(domain: String) -> Cached<(Mime, Vec<u8>)> {
     const FALLBACK_ICON: &[u8] = include_bytes!("../static/images/fallback-icon.png");
 
     if !is_valid_domain(&domain).await {
         warn!("Invalid domain: {}", domain);
         return Cached::ttl(
-            (ContentType::new("image", "png"), FALLBACK_ICON.to_vec()),
+            (mime::IMAGE_PNG, FALLBACK_ICON.to_vec()),
             CONFIG.icon_cache_negttl(),
             true,
         );
@@ -135,9 +136,9 @@ async fn icon_internal(domain: String) -> Cached<(ContentType, Vec<u8>)> {
 
     match get_icon(&domain).await {
         Some((icon, icon_type)) => {
-            Cached::ttl((ContentType::new("image", icon_type), icon), CONFIG.icon_cache_ttl(), true)
+            Cached::ttl((["image/", icon_type].concat(), icon), CONFIG.icon_cache_ttl(), true)
         }
-        _ => Cached::ttl((ContentType::new("image", "png"), FALLBACK_ICON.to_vec()), CONFIG.icon_cache_negttl(), true),
+        _ => Cached::ttl((mime::IMAGE_PNG, FALLBACK_ICON.to_vec()), CONFIG.icon_cache_negttl(), true),
     }
 }
 

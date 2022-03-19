@@ -5,7 +5,7 @@ use std::io::Cursor;
 
 use rocket::{
     fairing::{Fairing, Info, Kind},
-    http::{ContentType, Header, HeaderMap, Method, Status},
+    http::{Header, HeaderMap, Method, Status},
     request::FromParam,
     response::{self, Responder},
     Data, Orbit, Request, Response, Rocket,
@@ -98,7 +98,7 @@ impl Fairing for Cors {
             response.set_header(Header::new("Access-Control-Allow-Headers", req_allow_headers));
             response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
             response.set_status(Status::Ok);
-            response.set_header(ContentType::Plain);
+            response.set_header(mime::PLAIN);
             response.set_sized_body(Some(0), Cursor::new(""));
         }
     }

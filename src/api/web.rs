@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use rocket::{fs::NamedFile, http::ContentType};
+use rocket::{fs::NamedFile};
+use mime::Mime;
 use axum::{
     Json,
     Router,
@@ -37,8 +38,8 @@ async fn web_index() -> Cached<Option<NamedFile>> {
     Cached::short(NamedFile::open(Path::new(&CONFIG.web_vault_folder()).join("index.html")).await.ok(), false)
 }
 
-fn app_id() -> Cached<(ContentType, Json<Value>)> {
-    let content_type = ContentType::new("application", "fido.trusted-apps+json");
+fn app_id() -> Cached<(Mime, Json<Value>)> {
+    let content_type = "application/fido.trusted-apps+json";
 
     Cached::long(
         (
@@ -85,20 +86,20 @@ fn alive(_conn: DbConn) -> Json<String> {
     Json(format_date(&Utc::now().naive_utc()))
 }
 
-fn static_files(filename: String) -> Result<(ContentType, &'static [u8]), Error> {
+fn static_files(filename: String) -> Result<(mime::Mime, &'static [u8]), Error> {
     match filename.as_ref() {
-        "mail-github.png" => Ok((ContentType::PNG, include_bytes!("../static/images/mail-github.png"))),
-        "logo-gray.png" => Ok((ContentType::PNG, include_bytes!("../static/images/logo-gray.png"))),
-        "error-x.svg" => Ok((ContentType::SVG, include_bytes!("../static/images/error-x.svg"))),
-        "hibp.png" => Ok((ContentType::PNG, include_bytes!("../static/images/hibp.png"))),
-        "vaultwarden-icon.png" => Ok((ContentType::PNG, include_bytes!("../static/images/vaultwarden-icon.png"))),
-        "bootstrap.css" => Ok((ContentType::CSS, include_bytes!("../static/scripts/bootstrap.css"))),
-        "bootstrap-native.js" => Ok((ContentType::JavaScript, include_bytes!("../static/scripts/bootstrap-native.js"))),
-        "identicon.js" => Ok((ContentType::JavaScript, include_bytes!("../static/scripts/identicon.js"))),
-        "datatables.js" => Ok((ContentType::JavaScript, include_bytes!("../static/scripts/datatables.js"))),
-        "datatables.css" => Ok((ContentType::CSS, include_bytes!("../static/scripts/datatables.css"))),
+        "mail-github.png" => Ok((mime::IMAGE_PNG, include_bytes!("../static/images/mail-github.png"))),
+        "logo-gray.png" => Ok((mime::IMAGE_PNG, include_bytes!("../static/images/logo-gray.png"))),
+        "error-x.svg" => Ok((mime::SVG, include_bytes!("../static/images/error-x.svg"))),
+        "hibp.png" => Ok((mime::IMAGE_PNG, include_bytes!("../static/images/hibp.png"))),
+        "vaultwarden-icon.png" => Ok((mime::IMAGE_PNG, include_bytes!("../static/images/vaultwarden-icon.png"))),
+        "bootstrap.css" => Ok((mime::TEXT_CSS, include_bytes!("../static/scripts/bootstrap.css"))),
+        "bootstrap-native.js" => Ok((mime::JAVASCRIPT, include_bytes!("../static/scripts/bootstrap-native.js"))),
+        "identicon.js" => Ok((mime::JAVASCRIPT, include_bytes!("../static/scripts/identicon.js"))),
+        "datatables.js" => Ok((mime::JAVASCRIPT, include_bytes!("../static/scripts/datatables.js"))),
+        "datatables.css" => Ok((mime::TEXT_CSS, include_bytes!("../static/scripts/datatables.css"))),
         "jquery-3.6.0.slim.js" => {
-            Ok((ContentType::JavaScript, include_bytes!("../static/scripts/jquery-3.6.0.slim.js")))
+            Ok((mime::JAVASCRIPT, include_bytes!("../static/scripts/jquery-3.6.0.slim.js")))
         }
         _ => err!(format!("Static file not found: {}", filename)),
     }

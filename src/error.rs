@@ -191,7 +191,8 @@ fn _api_error(_: &impl std::any::Any, msg: &str) -> String {
 //
 use std::io::Cursor;
 
-use rocket::http::{ContentType, Status};
+use rocket::http::Status;
+use mime;
 use rocket::request::Request;
 use rocket::response::{self, Responder, Response};
 
@@ -205,7 +206,7 @@ impl<'r> Responder<'r, 'static> for Error {
 
         let code = Status::from_code(self.error_code).unwrap_or(Status::BadRequest);
         let body = self.to_string();
-        Response::build().status(code).header(ContentType::JSON).sized_body(Some(body.len()), Cursor::new(body)).ok()
+        Response::build().status(code).header(mime::JSON).sized_body(Some(body.len()), Cursor::new(body)).ok()
     }
 }
 

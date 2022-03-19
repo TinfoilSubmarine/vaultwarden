@@ -1,7 +1,10 @@
 use chrono::{Duration, Utc};
 use data_encoding::BASE32;
-use rocket::serde::json::Json;
-use rocket::Route;
+use axum::{
+    Json,
+    Router,
+    routing::{get, post, put},
+};
 use serde_json::Value;
 
 use crate::{
@@ -19,20 +22,21 @@ pub mod u2f;
 pub mod webauthn;
 pub mod yubikey;
 
-pub fn routes() -> Vec<Route> {
-    let mut routes = routes![get_twofactor, get_recover, recover, disable_twofactor, disable_twofactor_put,];
-
-    routes.append(&mut authenticator::routes());
-    routes.append(&mut duo::routes());
-    routes.append(&mut email::routes());
-    routes.append(&mut u2f::routes());
-    routes.append(&mut webauthn::routes());
-    routes.append(&mut yubikey::routes());
-
-    routes
+pub fn routes() -> Router {
+    Router::new()
+    .merge(authenticator::routes())
+    .merge(duo::routes())
+    .merge(email::routes())
+    .merge(u2f::routes())
+    .merge(webauthn::routes())
+    .merge(yubikey::routes())
+    .mount("/two-factor", get(get_twofactor))
+    .mount("/two-factor/get-recover", post(get_recover))
+    .mount("/two-factor/recover", post(recover))
+    .mount("/two-factor/disable", post(disable_twofactor))
+    .mount("/two-factor/disable", put(disable_twofactor_put))
 }
 
-#[get("/two-factor")]
 async fn get_twofactor(headers: Headers, conn: DbConn) -> Json<Value> {
     let twofactors = TwoFactor::find_by_user(&headers.user.uuid, &conn).await;
     let twofactors_json: Vec<Value> = twofactors.iter().map(TwoFactor::to_json_provider).collect();
@@ -44,7 +48,6 @@ async fn get_twofactor(headers: Headers, conn: DbConn) -> Json<Value> {
     }))
 }
 
-#[post("/two-factor/get-recover", data = "<data>")]
 fn get_recover(data: JsonUpcase<PasswordData>, headers: Headers) -> JsonResult {
     let data: PasswordData = data.into_inner().data;
     let user = headers.user;
@@ -67,7 +70,6 @@ struct RecoverTwoFactor {
     RecoveryCode: String,
 }
 
-#[post("/two-factor/recover", data = "<data>")]
 async fn recover(data: JsonUpcase<RecoverTwoFactor>, conn: DbConn) -> JsonResult {
     let data: RecoverTwoFactor = data.into_inner().data;
 
@@ -113,7 +115,6 @@ struct DisableTwoFactorData {
     Type: NumberOrString,
 }
 
-#[post("/two-factor/disable", data = "<data>")]
 async fn disable_twofactor(data: JsonUpcase<DisableTwoFactorData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: DisableTwoFactorData = data.into_inner().data;
     let password_hash = data.MasterPasswordHash;
@@ -154,7 +155,6 @@ async fn disable_twofactor(data: JsonUpcase<DisableTwoFactorData>, headers: Head
     })))
 }
 
-#[put("/two-factor/disable", data = "<data>")]
 async fn disable_twofactor_put(data: JsonUpcase<DisableTwoFactorData>, headers: Headers, conn: DbConn) -> JsonResult {
     disable_twofactor(data, headers, conn).await
 }

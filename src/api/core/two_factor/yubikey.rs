@@ -1,5 +1,8 @@
-use rocket::serde::json::Json;
-use rocket::Route;
+use axum::{
+    Json,
+    Router,
+    routing::{post, put},
+};
 use serde_json::Value;
 use yubico::{config::Config, verify};
 
@@ -14,8 +17,11 @@ use crate::{
     CONFIG,
 };
 
-pub fn routes() -> Vec<Route> {
-    routes![generate_yubikey, activate_yubikey, activate_yubikey_put,]
+pub fn routes() -> Router {
+    Router::new()
+        .mount("/two-factor/get-yubikey", post(generate_yubikey))
+        .mount("/two-factor/yubikey", post(activate_yubikey))
+        .mount("/two-factor/yubikey", put(activate_yubikey_put))
 }
 
 #[derive(Deserialize, Debug)]
@@ -77,7 +83,6 @@ fn verify_yubikey_otp(otp: String) -> EmptyResult {
     .and(Ok(()))
 }
 
-#[post("/two-factor/get-yubikey", data = "<data>")]
 async fn generate_yubikey(data: JsonUpcase<PasswordData>, headers: Headers, conn: DbConn) -> JsonResult {
     // Make sure the credentials are set
     get_yubico_credentials()?;
@@ -112,7 +117,6 @@ async fn generate_yubikey(data: JsonUpcase<PasswordData>, headers: Headers, conn
     }
 }
 
-#[post("/two-factor/yubikey", data = "<data>")]
 async fn activate_yubikey(data: JsonUpcase<EnableYubikeyData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: EnableYubikeyData = data.into_inner().data;
     let mut user = headers.user;
@@ -168,7 +172,6 @@ async fn activate_yubikey(data: JsonUpcase<EnableYubikeyData>, headers: Headers,
     Ok(Json(result))
 }
 
-#[put("/two-factor/yubikey", data = "<data>")]
 async fn activate_yubikey_put(data: JsonUpcase<EnableYubikeyData>, headers: Headers, conn: DbConn) -> JsonResult {
     activate_yubikey(data, headers, conn).await
 }

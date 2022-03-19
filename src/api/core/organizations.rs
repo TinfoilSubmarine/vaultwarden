@@ -1,6 +1,9 @@
 use num_traits::FromPrimitive;
-use rocket::serde::json::Json;
-use rocket::Route;
+use axum::{
+    Json,
+    Router,
+    routing::{get, post, put, delete},
+};
 use serde_json::Value;
 
 use crate::{
@@ -12,53 +15,52 @@ use crate::{
 
 use futures::{stream, stream::StreamExt};
 
-pub fn routes() -> Vec<Route> {
-    routes![
-        get_organization,
-        create_organization,
-        delete_organization,
-        post_delete_organization,
-        leave_organization,
-        get_user_collections,
-        get_org_collections,
-        get_org_collection_detail,
-        get_collection_users,
-        put_collection_users,
-        put_organization,
-        post_organization,
-        post_organization_collections,
-        delete_organization_collection_user,
-        post_organization_collection_delete_user,
-        post_organization_collection_update,
-        put_organization_collection_update,
-        delete_organization_collection,
-        post_organization_collection_delete,
-        get_org_details,
-        get_org_users,
-        send_invite,
-        reinvite_user,
-        bulk_reinvite_user,
-        confirm_invite,
-        bulk_confirm_invite,
-        accept_invite,
-        get_user,
-        edit_user,
-        put_organization_user,
-        delete_user,
-        bulk_delete_user,
-        post_delete_user,
-        post_org_import,
-        list_policies,
-        list_policies_token,
-        get_policy,
-        put_policy,
-        get_organization_tax,
-        get_plans,
-        get_plans_tax_rates,
-        import,
-        post_org_keys,
-        bulk_public_keys,
-    ]
+pub fn routes() -> Router {
+    Router::new()
+        .route("/organizations/:org_id", get(get_organization))
+        .route("/organizations", post(create_organization))
+        .route("/organizations/:org_id", delete(delete_organization))
+        .route("/organizations/:org_id/delete", post(post_delete_organization))
+        .route("/organizations/:org_id/leave", post(leave_organization))
+        .route("/collections", get(get_user_collections))
+        .route("/organizations/:org_id/collections", get(get_org_collections))
+        .route("/organizations/:org_id/collections/:coll_id/details", get(get_org_collection_detail))
+        .route("/organizations/:org_id/collections/:coll_id/users", get(get_collection_users))
+        .route("/organizations/:org_id/collections/:coll_id/users", put(put_collection_users))
+        .route("/organizations/:org_id", put(put_organization))
+        .route("/organizations/:org_id", post(post_organization))
+        .route("/organizations/:org_id/collections", post(post_organization_collections))
+        .route("/organizations/:org_id/collections/:col_id/user/:org_user_id", delete(delete_organization_collection_user))
+        .route("/organizations/:org_id/collections/:col_id/delete-user/:org_user_id", post(post_organization_collection_delete_user))
+        .route("/organizations/:org_id/collections/:col_id", post(post_organization_collection_update))
+        .route("/organizations/:org_id/collections/:col_id", put(put_organization_collection_update))
+        .route("/organizations/:org_id/collections/:col_id", delete(delete_organization_collection))
+        .route("/organizations/:org_id/collections/:col_id/delete", post(post_organization_collection_delete))
+        .route("/ciphers/organization-details?*data", get(get_org_details))
+        .route("/organizations/:org_id/users", get(get_org_users))
+        .route("/organizations/:org_id/users/invite", post(send_invite))
+        .route("/organizations/:org_id/users/:user_org/reinvite", post(reinvite_user))
+        .route("/organizations/:org_id/users/reinvite", post(bulk_reinvite_user))
+        .route("/organizations/:org_id/users/:org_user_id/confirm", post(confirm_invite))
+        .route("/organizations/:org_id/users/confirm", post(bulk_confirm_invite))
+        .route("/organizations/:_org_id/users/:_org_user_id/accept", post(accept_invite))
+        .route("/organizations/:org_id/users/:org_user_id", get(get_user))
+        .route("/organizations/:org_id/users/:org_user_id", post(edit_user))
+        .route("/organizations/:org_id/users/:org_user_id", put(put_organization_user))
+        .route("/organizations/:org_id/users/:org_user_id", delete(delete_user))
+        .route("/organizations/:org_id/users", delete(bulk_delete_user))
+        .route("/organizations/:org_id/users/:org_user_id/delete", post(post_delete_user))
+        .route("/ciphers/import-organization?*query", post(post_org_import))
+        .route("/organizations/:org_id/policies", get(list_policies))
+        .route("/organizations/:org_id/policies/token?:token", get(list_policies_token))
+        .route("/organizations/:org_id/policies/:pol_type", get(get_policy))
+        .route("/organizations/:org_id/policies/:pol_type", put(put_policy))
+        .route("/organizations/:org_id/tax", get(get_organization_tax))
+        .route("/plans", get(get_plans))
+        .route("/plans/sales-tax-rates", get(get_plans_tax_rates))
+        .route("/organizations/:org_id/import", post(import))
+        .route("/organizations/:org_id/keys", post(post_org_keys))
+        .route("/organizations/:org_id/users/public-keys", post(bulk_public_keys))
 }
 
 #[derive(Deserialize)]
@@ -99,7 +101,6 @@ struct OrgBulkIds {
     Ids: Vec<String>,
 }
 
-#[post("/organizations", data = "<data>")]
 async fn create_organization(headers: Headers, data: JsonUpcase<OrgData>, conn: DbConn) -> JsonResult {
     if !CONFIG.is_org_creation_allowed(&headers.user.email) {
         err!("User not allowed to create organizations")
@@ -134,7 +135,6 @@ async fn create_organization(headers: Headers, data: JsonUpcase<OrgData>, conn: 
     Ok(Json(org.to_json()))
 }
 
-#[delete("/organizations/<org_id>", data = "<data>")]
 async fn delete_organization(
     org_id: String,
     data: JsonUpcase<PasswordData>,
@@ -154,7 +154,6 @@ async fn delete_organization(
     }
 }
 
-#[post("/organizations/<org_id>/delete", data = "<data>")]
 async fn post_delete_organization(
     org_id: String,
     data: JsonUpcase<PasswordData>,
@@ -164,7 +163,6 @@ async fn post_delete_organization(
     delete_organization(org_id, data, headers, conn).await
 }
 
-#[post("/organizations/<org_id>/leave")]
 async fn leave_organization(org_id: String, headers: Headers, conn: DbConn) -> EmptyResult {
     match UserOrganization::find_by_user_and_org(&headers.user.uuid, &org_id, &conn).await {
         None => err!("User not part of organization"),
@@ -183,7 +181,6 @@ async fn leave_organization(org_id: String, headers: Headers, conn: DbConn) -> E
     }
 }
 
-#[get("/organizations/<org_id>")]
 async fn get_organization(org_id: String, _headers: OwnerHeaders, conn: DbConn) -> JsonResult {
     match Organization::find_by_uuid(&org_id, &conn).await {
         Some(organization) => Ok(Json(organization.to_json())),
@@ -191,7 +188,6 @@ async fn get_organization(org_id: String, _headers: OwnerHeaders, conn: DbConn) 
     }
 }
 
-#[put("/organizations/<org_id>", data = "<data>")]
 async fn put_organization(
     org_id: String,
     headers: OwnerHeaders,
@@ -201,7 +197,6 @@ async fn put_organization(
     post_organization(org_id, headers, data, conn).await
 }
 
-#[post("/organizations/<org_id>", data = "<data>")]
 async fn post_organization(
     org_id: String,
     _headers: OwnerHeaders,
@@ -223,7 +218,6 @@ async fn post_organization(
 }
 
 // GET /api/collections?writeOnly=false
-#[get("/collections")]
 async fn get_user_collections(headers: Headers, conn: DbConn) -> Json<Value> {
     Json(json!({
         "Data":
@@ -236,7 +230,6 @@ async fn get_user_collections(headers: Headers, conn: DbConn) -> Json<Value> {
     }))
 }
 
-#[get("/organizations/<org_id>/collections")]
 async fn get_org_collections(org_id: String, _headers: ManagerHeadersLoose, conn: DbConn) -> Json<Value> {
     Json(json!({
         "Data":
@@ -249,7 +242,6 @@ async fn get_org_collections(org_id: String, _headers: ManagerHeadersLoose, conn
     }))
 }
 
-#[post("/organizations/<org_id>/collections", data = "<data>")]
 async fn post_organization_collections(
     org_id: String,
     headers: ManagerHeadersLoose,
@@ -282,7 +274,6 @@ async fn post_organization_collections(
     Ok(Json(collection.to_json()))
 }
 
-#[put("/organizations/<org_id>/collections/<col_id>", data = "<data>")]
 async fn put_organization_collection_update(
     org_id: String,
     col_id: String,
@@ -293,7 +284,6 @@ async fn put_organization_collection_update(
     post_organization_collection_update(org_id, col_id, headers, data, conn).await
 }
 
-#[post("/organizations/<org_id>/collections/<col_id>", data = "<data>")]
 async fn post_organization_collection_update(
     org_id: String,
     col_id: String,
@@ -323,7 +313,6 @@ async fn post_organization_collection_update(
     Ok(Json(collection.to_json()))
 }
 
-#[delete("/organizations/<org_id>/collections/<col_id>/user/<org_user_id>")]
 async fn delete_organization_collection_user(
     org_id: String,
     col_id: String,
@@ -353,7 +342,6 @@ async fn delete_organization_collection_user(
     }
 }
 
-#[post("/organizations/<org_id>/collections/<col_id>/delete-user/<org_user_id>")]
 async fn post_organization_collection_delete_user(
     org_id: String,
     col_id: String,
@@ -364,7 +352,6 @@ async fn post_organization_collection_delete_user(
     delete_organization_collection_user(org_id, col_id, org_user_id, headers, conn).await
 }
 
-#[delete("/organizations/<org_id>/collections/<col_id>")]
 async fn delete_organization_collection(
     org_id: String,
     col_id: String,
@@ -390,7 +377,6 @@ struct DeleteCollectionData {
     OrgId: String,
 }
 
-#[post("/organizations/<org_id>/collections/<col_id>/delete", data = "<_data>")]
 async fn post_organization_collection_delete(
     org_id: String,
     col_id: String,
@@ -401,7 +387,6 @@ async fn post_organization_collection_delete(
     delete_organization_collection(org_id, col_id, headers, conn).await
 }
 
-#[get("/organizations/<org_id>/collections/<coll_id>/details")]
 async fn get_org_collection_detail(
     org_id: String,
     coll_id: String,
@@ -420,7 +405,6 @@ async fn get_org_collection_detail(
     }
 }
 
-#[get("/organizations/<org_id>/collections/<coll_id>/users")]
 async fn get_collection_users(org_id: String, coll_id: String, _headers: ManagerHeaders, conn: DbConn) -> JsonResult {
     // Get org and collection, check that collection is from org
     let collection = match Collection::find_by_uuid_and_org(&coll_id, &org_id, &conn).await {
@@ -442,7 +426,6 @@ async fn get_collection_users(org_id: String, coll_id: String, _headers: Manager
     Ok(Json(json!(user_list)))
 }
 
-#[put("/organizations/<org_id>/collections/<coll_id>/users", data = "<data>")]
 async fn put_collection_users(
     org_id: String,
     coll_id: String,
@@ -481,7 +464,6 @@ struct OrgIdData {
     organization_id: String,
 }
 
-#[get("/ciphers/organization-details?<data..>")]
 async fn get_org_details(data: OrgIdData, headers: Headers, conn: DbConn) -> Json<Value> {
     let ciphers_json = stream::iter(Cipher::find_by_org(&data.organization_id, &conn).await)
         .then(|c| async {
@@ -498,7 +480,6 @@ async fn get_org_details(data: OrgIdData, headers: Headers, conn: DbConn) -> Jso
     }))
 }
 
-#[get("/organizations/<org_id>/users")]
 async fn get_org_users(org_id: String, _headers: ManagerHeadersLoose, conn: DbConn) -> Json<Value> {
     let users_json = stream::iter(UserOrganization::find_by_org(&org_id, &conn).await)
         .then(|u| async {
@@ -515,7 +496,6 @@ async fn get_org_users(org_id: String, _headers: ManagerHeadersLoose, conn: DbCo
     }))
 }
 
-#[post("/organizations/<org_id>/keys", data = "<data>")]
 async fn post_org_keys(
     org_id: String,
     data: JsonUpcase<OrgKeyData>,
@@ -563,7 +543,6 @@ struct InviteData {
     AccessAll: Option<bool>,
 }
 
-#[post("/organizations/<org_id>/users/invite", data = "<data>")]
 async fn send_invite(org_id: String, data: JsonUpcase<InviteData>, headers: AdminHeaders, conn: DbConn) -> EmptyResult {
     let data: InviteData = data.into_inner().data;
 
@@ -653,7 +632,6 @@ async fn send_invite(org_id: String, data: JsonUpcase<InviteData>, headers: Admi
     Ok(())
 }
 
-#[post("/organizations/<org_id>/users/reinvite", data = "<data>")]
 async fn bulk_reinvite_user(
     org_id: String,
     data: JsonUpcase<OrgBulkIds>,
@@ -685,7 +663,6 @@ async fn bulk_reinvite_user(
     }))
 }
 
-#[post("/organizations/<org_id>/users/<user_org>/reinvite")]
 async fn reinvite_user(org_id: String, user_org: String, headers: AdminHeaders, conn: DbConn) -> EmptyResult {
     _reinvite_user(&org_id, &user_org, &headers.user.email, &conn).await
 }
@@ -741,7 +718,6 @@ struct AcceptData {
     Token: String,
 }
 
-#[post("/organizations/<_org_id>/users/<_org_user_id>/accept", data = "<data>")]
 async fn accept_invite(
     _org_id: String,
     _org_user_id: String,
@@ -834,7 +810,6 @@ async fn accept_invite(
     Ok(())
 }
 
-#[post("/organizations/<org_id>/users/confirm", data = "<data>")]
 async fn bulk_confirm_invite(
     org_id: String,
     data: JsonUpcase<Value>,
@@ -873,7 +848,6 @@ async fn bulk_confirm_invite(
     }))
 }
 
-#[post("/organizations/<org_id>/users/<org_user_id>/confirm", data = "<data>")]
 async fn confirm_invite(
     org_id: String,
     org_user_id: String,
@@ -928,7 +902,6 @@ async fn _confirm_invite(
     user_to_confirm.save(conn).await
 }
 
-#[get("/organizations/<org_id>/users/<org_user_id>")]
 async fn get_user(org_id: String, org_user_id: String, _headers: AdminHeaders, conn: DbConn) -> JsonResult {
     let user = match UserOrganization::find_by_uuid_and_org(&org_user_id, &org_id, &conn).await {
         Some(user) => user,
@@ -946,7 +919,6 @@ struct EditUserData {
     AccessAll: bool,
 }
 
-#[put("/organizations/<org_id>/users/<org_user_id>", data = "<data>", rank = 1)]
 async fn put_organization_user(
     org_id: String,
     org_user_id: String,
@@ -957,7 +929,6 @@ async fn put_organization_user(
     edit_user(org_id, org_user_id, data, headers, conn).await
 }
 
-#[post("/organizations/<org_id>/users/<org_user_id>", data = "<data>", rank = 1)]
 async fn edit_user(
     org_id: String,
     org_user_id: String,
@@ -1027,7 +998,6 @@ async fn edit_user(
     user_to_edit.save(&conn).await
 }
 
-#[delete("/organizations/<org_id>/users", data = "<data>")]
 async fn bulk_delete_user(
     org_id: String,
     data: JsonUpcase<OrgBulkIds>,
@@ -1059,7 +1029,6 @@ async fn bulk_delete_user(
     }))
 }
 
-#[delete("/organizations/<org_id>/users/<org_user_id>")]
 async fn delete_user(org_id: String, org_user_id: String, headers: AdminHeaders, conn: DbConn) -> EmptyResult {
     _delete_user(&org_id, &org_user_id, &headers, &conn).await
 }
@@ -1086,12 +1055,10 @@ async fn _delete_user(org_id: &str, org_user_id: &str, headers: &AdminHeaders, c
     user_to_delete.delete(conn).await
 }
 
-#[post("/organizations/<org_id>/users/<org_user_id>/delete")]
 async fn post_delete_user(org_id: String, org_user_id: String, headers: AdminHeaders, conn: DbConn) -> EmptyResult {
     delete_user(org_id, org_user_id, headers, conn).await
 }
 
-#[post("/organizations/<org_id>/users/public-keys", data = "<data>")]
 async fn bulk_public_keys(
     org_id: String,
     data: JsonUpcase<OrgBulkIds>,
@@ -1148,7 +1115,6 @@ struct RelationsData {
     Value: usize,
 }
 
-#[post("/ciphers/import-organization?<query..>", data = "<data>")]
 async fn post_org_import(
     query: OrgIdData,
     data: JsonUpcase<ImportData>,
@@ -1204,7 +1170,6 @@ async fn post_org_import(
     user.update_revision(&conn).await
 }
 
-#[get("/organizations/<org_id>/policies")]
 async fn list_policies(org_id: String, _headers: AdminHeaders, conn: DbConn) -> Json<Value> {
     let policies = OrgPolicy::find_by_org(&org_id, &conn).await;
     let policies_json: Vec<Value> = policies.iter().map(OrgPolicy::to_json).collect();
@@ -1216,7 +1181,6 @@ async fn list_policies(org_id: String, _headers: AdminHeaders, conn: DbConn) -> 
     }))
 }
 
-#[get("/organizations/<org_id>/policies/token?<token>")]
 async fn list_policies_token(org_id: String, token: String, conn: DbConn) -> JsonResult {
     let invite = crate::auth::decode_invite(&token)?;
 
@@ -1240,7 +1204,6 @@ async fn list_policies_token(org_id: String, token: String, conn: DbConn) -> Jso
     })))
 }
 
-#[get("/organizations/<org_id>/policies/<pol_type>")]
 async fn get_policy(org_id: String, pol_type: i32, _headers: AdminHeaders, conn: DbConn) -> JsonResult {
     let pol_type_enum = match OrgPolicyType::from_i32(pol_type) {
         Some(pt) => pt,
@@ -1263,7 +1226,6 @@ struct PolicyData {
     data: Option<Value>,
 }
 
-#[put("/organizations/<org_id>/policies/<pol_type>", data = "<data>")]
 async fn put_policy(
     org_id: String,
     pol_type: i32,
@@ -1338,7 +1300,6 @@ async fn put_policy(
 }
 
 #[allow(unused_variables)]
-#[get("/organizations/<org_id>/tax")]
 fn get_organization_tax(org_id: String, _headers: Headers) -> Json<Value> {
     // Prevent a 404 error, which also causes Javascript errors.
     // Upstream sends "Only allowed when not self hosted." As an error message.
@@ -1347,7 +1308,6 @@ fn get_organization_tax(org_id: String, _headers: Headers) -> Json<Value> {
     Json(_empty_data_json())
 }
 
-#[get("/plans")]
 fn get_plans(_headers: Headers) -> Json<Value> {
     // Respond with a minimal json just enough to allow the creation of an new organization.
     Json(json!({
@@ -1364,7 +1324,6 @@ fn get_plans(_headers: Headers) -> Json<Value> {
     }))
 }
 
-#[get("/plans/sales-tax-rates")]
 fn get_plans_tax_rates(_headers: Headers) -> Json<Value> {
     // Prevent a 404 error, which also causes Javascript errors.
     Json(_empty_data_json())
@@ -1404,7 +1363,6 @@ struct OrgImportData {
     Users: Vec<OrgImportUserData>,
 }
 
-#[post("/organizations/<org_id>/import", data = "<data>")]
 async fn import(org_id: String, data: JsonUpcase<OrgImportData>, headers: Headers, conn: DbConn) -> EmptyResult {
     let data = data.into_inner().data;
 

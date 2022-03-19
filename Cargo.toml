@@ -48,7 +48,8 @@ num-traits = "0.2.14"
 num-derive = "0.3.3"
 
 # Web framework
-rocket = { version = "0.5.0-rc.1", features = ["tls", "json"], default-features = false }
+axum = "0.4.8"
+mime = "0.3.16"
 
 # WebSockets libraries
 ws = { version = "0.11.1", package = "parity-ws" }
@@ -140,8 +141,6 @@ governor = "0.4.2"
 ctrlc = { version = "3.2.1", features = ["termination"] }
 
 [patch.crates-io]
-rocket = { git = 'https://github.com/SergioBenitez/Rocket', rev = 'ae0ccf43f11be5c00bb9cd49996c8bb06a7e1651' }
-
 # The maintainer of the `job_scheduler` crate doesn't seem to have responded
 # to any issues or PRs for almost a year (as of April 2021). This hopefully
 # temporary fork updates Cargo.toml to use more up-to-date dependencies.

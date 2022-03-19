@@ -1,5 +1,8 @@
-use rocket::serde::json::Json;
-use rocket::Route;
+use axum::{
+    Json,
+    Router,
+    routing::{post, put, delete},
+};
 use serde_json::Value;
 use url::Url;
 use webauthn_rs::{base64_data::Base64UrlSafeData, proto::*, AuthenticationState, RegistrationState, Webauthn};
@@ -17,8 +20,13 @@ use crate::{
     CONFIG,
 };
 
-pub fn routes() -> Vec<Route> {
-    routes![get_webauthn, generate_webauthn_challenge, activate_webauthn, activate_webauthn_put, delete_webauthn,]
+pub fn routes() -> Router {
+    Router::new()
+        .mount("/two-factor/get-webauthn", post(get_webauthn))
+        .mount("/two-factor/get-webauthn-challenge", post(generate_webauthn_challenge))
+        .mount("/two-factor/webauthn", post(activate_webauthn))
+        .mount("/two-factor/webauthn", put(activate_webauthn_put))
+        .mount("/two-factor/webauthn", delete(delete_webauthn))
 }
 
 struct WebauthnConfig {
@@ -79,7 +87,6 @@ impl WebauthnRegistration {
     }
 }
 
-#[post("/two-factor/get-webauthn", data = "<data>")]
 async fn get_webauthn(data: JsonUpcase<PasswordData>, headers: Headers, conn: DbConn) -> JsonResult {
     if !CONFIG.domain_set() {
         err!("`DOMAIN` environment variable is not set. Webauthn disabled")
@@ -99,7 +106,6 @@ async fn get_webauthn(data: JsonUpcase<PasswordData>, headers: Headers, conn: Db
     })))
 }
 
-#[post("/two-factor/get-webauthn-challenge", data = "<data>")]
 async fn generate_webauthn_challenge(data: JsonUpcase<PasswordData>, headers: Headers, conn: DbConn) -> JsonResult {
     if !headers.user.check_valid_password(&data.data.MasterPasswordHash) {
         err!("Invalid password");
@@ -218,7 +224,6 @@ impl From<PublicKeyCredentialCopy> for PublicKeyCredential {
     }
 }
 
-#[post("/two-factor/webauthn", data = "<data>")]
 async fn activate_webauthn(data: JsonUpcase<EnableWebauthnData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: EnableWebauthnData = data.into_inner().data;
     let mut user = headers.user;
@@ -266,7 +271,6 @@ async fn activate_webauthn(data: JsonUpcase<EnableWebauthnData>, headers: Header
     })))
 }
 
-#[put("/two-factor/webauthn", data = "<data>")]
 async fn activate_webauthn_put(data: JsonUpcase<EnableWebauthnData>, headers: Headers, conn: DbConn) -> JsonResult {
     activate_webauthn(data, headers, conn).await
 }
@@ -278,7 +282,6 @@ struct DeleteU2FData {
     MasterPasswordHash: String,
 }
 
-#[delete("/two-factor/webauthn", data = "<data>")]
 async fn delete_webauthn(data: JsonUpcase<DeleteU2FData>, headers: Headers, conn: DbConn) -> JsonResult {
     let id = data.data.Id.into_i32()?;
     if !headers.user.check_valid_password(&data.data.MasterPasswordHash) {

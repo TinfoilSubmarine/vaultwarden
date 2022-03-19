@@ -1,18 +1,22 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use rocket::serde::json::Json;
-use rocket::Route;
+use axum::{
+    Json,
+    Router,
+    routing::{get, post},
+};
 use serde_json::Value as JsonValue;
 
 use crate::{api::EmptyResult, auth::Headers, Error, CONFIG};
 
-pub fn routes() -> Vec<Route> {
-    routes![negotiate, websockets_err]
+pub fn routes() -> Router {
+    Router::new()
+        .route("/hub/negotiate", post(negotiate))
+        .route("/hub", get(websockets_err))
 }
 
 static SHOW_WEBSOCKETS_MSG: AtomicBool = AtomicBool::new(true);
 
-#[get("/hub")]
 fn websockets_err() -> EmptyResult {
     if CONFIG.websocket_enabled()
         && SHOW_WEBSOCKETS_MSG.compare_exchange(true, false, Ordering::Relaxed, Ordering::Relaxed).is_ok()
@@ -29,7 +33,6 @@ fn websockets_err() -> EmptyResult {
     }
 }
 
-#[post("/hub/negotiate")]
 fn negotiate(_headers: Headers) -> Json<JsonValue> {
     use crate::crypto;
     use data_encoding::BASE64URL;

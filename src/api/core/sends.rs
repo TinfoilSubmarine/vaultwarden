@@ -4,7 +4,11 @@ use chrono::{DateTime, Duration, Utc};
 use rocket::form::Form;
 use rocket::fs::NamedFile;
 use rocket::fs::TempFile;
-use rocket::serde::json::Json;
+use axum::{
+    Json,
+    Router,
+    routing::{get, post, put, delete},
+};
 use serde_json::Value;
 
 use crate::{
@@ -17,19 +21,18 @@ use crate::{
 
 const SEND_INACCESSIBLE_MSG: &str = "Send does not exist or is no longer available";
 
-pub fn routes() -> Vec<rocket::Route> {
-    routes![
-        get_sends,
-        get_send,
-        post_send,
-        post_send_file,
-        post_access,
-        post_access_file,
-        put_send,
-        delete_send,
-        put_remove_password,
-        download_send
-    ]
+pub fn routes() -> Router {
+    Router::new()
+        .mount("/sends", get(get_sends))
+        .mount("/sends/:uuid", get(get_send))
+        .mount("/sends", post(post_send))
+        .mount("/sends/file", post(post_send_file))
+        .mount("/sends/access/:access_id", post(post_access))
+        .mount("/sends/:send_id/access/file/:file_id", post(post_access_file))
+        .mount("/sends/:id", put(put_send))
+        .mount("/sends/:id", delete(delete_send))
+        .mount("/sends/:id/remove-password", put(put_remove_password))
+        .mount("/sends/:send_id/:file_id?:t", get(download_send))
 }
 
 pub async fn purge_sends(pool: DbPool) {
@@ -134,7 +137,6 @@ async fn create_send(data: SendData, user_uuid: String) -> ApiResult<Send> {
     Ok(send)
 }
 
-#[get("/sends")]
 async fn get_sends(headers: Headers, conn: DbConn) -> Json<Value> {
     let sends = Send::find_by_user(&headers.user.uuid, &conn);
     let sends_json: Vec<Value> = sends.await.iter().map(|s| s.to_json()).collect();
@@ -146,7 +148,6 @@ async fn get_sends(headers: Headers, conn: DbConn) -> Json<Value> {
     }))
 }
 
-#[get("/sends/<uuid>")]
 async fn get_send(uuid: String, headers: Headers, conn: DbConn) -> JsonResult {
     let send = match Send::find_by_uuid(&uuid, &conn).await {
         Some(send) => send,
@@ -160,7 +161,6 @@ async fn get_send(uuid: String, headers: Headers, conn: DbConn) -> JsonResult {
     Ok(Json(send.to_json()))
 }
 
-#[post("/sends", data = "<data>")]
 async fn post_send(data: JsonUpcase<SendData>, headers: Headers, conn: DbConn, nt: Notify<'_>) -> JsonResult {
     enforce_disable_send_policy(&headers, &conn).await?;
 
@@ -184,7 +184,6 @@ struct UploadData<'f> {
     data: TempFile<'f>,
 }
 
-#[post("/sends/file", format = "multipart/form-data", data = "<data>")]
 async fn post_send_file(data: Form<UploadData<'_>>, headers: Headers, conn: DbConn, nt: Notify<'_>) -> JsonResult {
     enforce_disable_send_policy(&headers, &conn).await?;
 
@@ -248,7 +247,6 @@ pub struct SendAccessData {
     pub Password: Option<String>,
 }
 
-#[post("/sends/access/<access_id>", data = "<data>")]
 async fn post_access(access_id: String, data: JsonUpcase<SendAccessData>, conn: DbConn, ip: ClientIp) -> JsonResult {
     let mut send = match Send::find_by_access_id(&access_id, &conn).await {
         Some(s) => s,
@@ -293,7 +291,6 @@ async fn post_access(access_id: String, data: JsonUpcase<SendAccessData>, conn: 
     Ok(Json(send.to_json_access(&conn).await))
 }
 
-#[post("/sends/<send_id>/access/file/<file_id>", data = "<data>")]
 async fn post_access_file(
     send_id: String,
     file_id: String,
@@ -347,7 +344,6 @@ async fn post_access_file(
     })))
 }
 
-#[get("/sends/<send_id>/<file_id>?<t>")]
 async fn download_send(send_id: SafeString, file_id: SafeString, t: String) -> Option<NamedFile> {
     if let Ok(claims) = crate::auth::decode_send(&t) {
         if claims.sub == format!("{}/{}", send_id, file_id) {
@@ -357,7 +353,6 @@ async fn download_send(send_id: SafeString, file_id: SafeString, t: String) -> O
     None
 }
 
-#[put("/sends/<id>", data = "<data>")]
 async fn put_send(
     id: String,
     data: JsonUpcase<SendData>,
@@ -423,7 +418,6 @@ async fn put_send(
     Ok(Json(send.to_json()))
 }
 
-#[delete("/sends/<id>")]
 async fn delete_send(id: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> EmptyResult {
     let send = match Send::find_by_uuid(&id, &conn).await {
         Some(s) => s,
@@ -440,7 +434,6 @@ async fn delete_send(id: String, headers: Headers, conn: DbConn, nt: Notify<'_>)
     Ok(())
 }
 
-#[put("/sends/<id>/remove-password")]
 async fn put_remove_password(id: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> JsonResult {
     enforce_disable_send_policy(&headers, &conn).await?;
 

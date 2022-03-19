@@ -3,7 +3,12 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::env;
 
-use rocket::serde::json::Json;
+use axum::{
+    Json,
+    Router,
+    routing::{get, post},
+};
+
 use rocket::{
     form::Form,
     http::{Cookie, CookieJar, SameSite, Status},
@@ -29,34 +34,33 @@ use futures::{stream, stream::StreamExt};
 
 pub fn routes() -> Vec<Route> {
     if !CONFIG.disable_admin_token() && !CONFIG.is_admin_token_set() {
-        return routes![admin_disabled];
+        Router::new().route("/", get(admin_disabled))
     }
 
-    routes![
-        admin_login,
-        get_users_json,
-        get_user_json,
-        post_admin_login,
-        admin_page,
-        invite_user,
-        logout,
-        delete_user,
-        deauth_user,
-        disable_user,
-        enable_user,
-        remove_2fa,
-        update_user_org_type,
-        update_revision_users,
-        post_config,
-        delete_config,
-        backup_db,
-        test_smtp,
-        users_overview,
-        organizations_overview,
-        delete_organization,
-        diagnostics,
-        get_diagnostics_config
-    ]
+    Router::new()
+        .route("/", rank = 2, get(admin_login))
+        .route("/users", get(get_users_json))
+        .route("/users/:uuid", get(get_user_json))
+        .route("/", post(post_admin_login))
+        .route("/", get(admin_page))
+        .route("invite", post(invite_user))
+        .route("/logout", get(logout))
+        .route("/users/:uuid/delete", post(delete_user))
+        .route("/users/:uuid/deauth", post(deauth_user))
+        .route("/users/:uuid/disable", post(disable_user))
+        .route("/users/:uuid/enable", post(enable_user))
+        .route("/users/:uuid/remove-2fa", post(remove_2fa))
+        .route("/users/org_type", post(update_user_org_type))
+        .route("/users/update_revision", post(update_revision_users))
+        .route("/config", post(post_config))
+        .route("/config/delete", post(delete_config))
+        .route("/config/backup_db", post(backup_db))
+        .route("/test/smtp", post(test_smtp))
+        .route("/users/overview", get(users_overview))
+        .route("/organizations/overview", get(organizations_overview))
+        .route("/organizations/:uuid/delete", post(delete_organization))
+        .route("/diagnostics", get(diagnostics))
+        .route("/diagnostics/config", get(get_diagnostics_config))
 }
 
 static DB_TYPE: Lazy<&str> = Lazy::new(|| {
@@ -72,7 +76,6 @@ static DB_TYPE: Lazy<&str> = Lazy::new(|| {
 static CAN_BACKUP: Lazy<bool> =
     Lazy::new(|| DbConnType::from_url(&CONFIG.database_url()).map(|t| t == DbConnType::sqlite).unwrap_or(false));
 
-#[get("/")]
 fn admin_disabled() -> &'static str {
     "The admin panel is disabled, please configure the 'ADMIN_TOKEN' variable to enable it"
 }
@@ -140,7 +143,6 @@ fn admin_url(referer: Referer) -> String {
     }
 }
 
-#[get("/", rank = 2)]
 fn admin_login(flash: Option<FlashMessage<'_>>) -> ApiResult<Html<String>> {
     // If there is an error, show it
     let msg = flash.map(|msg| format!("{}: {}", msg.kind(), msg.message()));
@@ -161,7 +163,6 @@ struct LoginForm {
     token: String,
 }
 
-#[post("/", data = "<data>")]
 fn post_admin_login(
     data: Form<LoginForm>,
     cookies: &CookieJar<'_>,
@@ -243,7 +244,6 @@ impl AdminTemplateData {
     }
 }
 
-#[get("/", rank = 1)]
 fn admin_page(_token: AdminToken) -> ApiResult<Html<String>> {
     let text = AdminTemplateData::new().render()?;
     Ok(Html(text))
@@ -263,7 +263,6 @@ async fn get_user_or_404(uuid: &str, conn: &DbConn) -> ApiResult<User> {
     }
 }
 
-#[post("/invite", data = "<data>")]
 async fn invite_user(data: Json<InviteData>, _token: AdminToken, conn: DbConn) -> JsonResult {
     let data: InviteData = data.into_inner();
     let email = data.email.clone();
@@ -288,7 +287,6 @@ async fn invite_user(data: Json<InviteData>, _token: AdminToken, conn: DbConn) -
     Ok(Json(user.to_json(&conn).await))
 }
 
-#[post("/test/smtp", data = "<data>")]
 fn test_smtp(data: Json<InviteData>, _token: AdminToken) -> EmptyResult {
     let data: InviteData = data.into_inner();
 
@@ -299,13 +297,11 @@ fn test_smtp(data: Json<InviteData>, _token: AdminToken) -> EmptyResult {
     }
 }
 
-#[get("/logout")]
 fn logout(cookies: &CookieJar<'_>, referer: Referer) -> Redirect {
     cookies.remove(Cookie::build(COOKIE_NAME, "").path(admin_path()).finish());
     Redirect::to(admin_url(referer))
 }
 
-#[get("/users")]
 async fn get_users_json(_token: AdminToken, conn: DbConn) -> Json<Value> {
     let users_json = stream::iter(User::get_all(&conn).await)
         .then(|u| async {
@@ -318,7 +314,6 @@ async fn get_users_json(_token: AdminToken, conn: DbConn) -> Json<Value> {
     Json(Value::Array(users_json))
 }
 
-#[get("/users/overview")]
 async fn users_overview(_token: AdminToken, conn: DbConn) -> ApiResult<Html<String>> {
     const DT_FMT: &str = "%Y-%m-%d %H:%M:%S %Z";
 
@@ -344,20 +339,17 @@ async fn users_overview(_token: AdminToken, conn: DbConn) -> ApiResult<Html<Stri
     Ok(Html(text))
 }
 
-#[get("/users/<uuid>")]
 async fn get_user_json(uuid: String, _token: AdminToken, conn: DbConn) -> JsonResult {
     let user = get_user_or_404(&uuid, &conn).await?;
 
     Ok(Json(user.to_json(&conn).await))
 }
 
-#[post("/users/<uuid>/delete")]
 async fn delete_user(uuid: String, _token: AdminToken, conn: DbConn) -> EmptyResult {
     let user = get_user_or_404(&uuid, &conn).await?;
     user.delete(&conn).await
 }
 
-#[post("/users/<uuid>/deauth")]
 async fn deauth_user(uuid: String, _token: AdminToken, conn: DbConn) -> EmptyResult {
     let mut user = get_user_or_404(&uuid, &conn).await?;
     Device::delete_all_by_user(&user.uuid, &conn).await?;
@@ -366,7 +358,6 @@ async fn deauth_user(uuid: String, _token: AdminToken, conn: DbConn) -> EmptyRes
     user.save(&conn).await
 }
 
-#[post("/users/<uuid>/disable")]
 async fn disable_user(uuid: String, _token: AdminToken, conn: DbConn) -> EmptyResult {
     let mut user = get_user_or_404(&uuid, &conn).await?;
     Device::delete_all_by_user(&user.uuid, &conn).await?;
@@ -376,7 +367,6 @@ async fn disable_user(uuid: String, _token: AdminToken, conn: DbConn) -> EmptyRe
     user.save(&conn).await
 }
 
-#[post("/users/<uuid>/enable")]
 async fn enable_user(uuid: String, _token: AdminToken, conn: DbConn) -> EmptyResult {
     let mut user = get_user_or_404(&uuid, &conn).await?;
     user.enabled = true;
@@ -384,7 +374,6 @@ async fn enable_user(uuid: String, _token: AdminToken, conn: DbConn) -> EmptyRes
     user.save(&conn).await
 }
 
-#[post("/users/<uuid>/remove-2fa")]
 async fn remove_2fa(uuid: String, _token: AdminToken, conn: DbConn) -> EmptyResult {
     let mut user = get_user_or_404(&uuid, &conn).await?;
     TwoFactor::delete_all_by_user(&user.uuid, &conn).await?;
@@ -399,7 +388,6 @@ struct UserOrgTypeData {
     org_uuid: String,
 }
 
-#[post("/users/org_type", data = "<data>")]
 async fn update_user_org_type(data: Json<UserOrgTypeData>, _token: AdminToken, conn: DbConn) -> EmptyResult {
     let data: UserOrgTypeData = data.into_inner();
 
@@ -427,12 +415,10 @@ async fn update_user_org_type(data: Json<UserOrgTypeData>, _token: AdminToken, c
     user_to_edit.save(&conn).await
 }
 
-#[post("/users/update_revision")]
 async fn update_revision_users(_token: AdminToken, conn: DbConn) -> EmptyResult {
     User::update_all_revisions(&conn).await
 }
 
-#[get("/organizations/overview")]
 async fn organizations_overview(_token: AdminToken, conn: DbConn) -> ApiResult<Html<String>> {
     let organizations_json = stream::iter(Organization::get_all(&conn).await)
         .then(|o| async {
@@ -451,7 +437,6 @@ async fn organizations_overview(_token: AdminToken, conn: DbConn) -> ApiResult<H
     Ok(Html(text))
 }
 
-#[post("/organizations/<uuid>/delete")]
 async fn delete_organization(uuid: String, _token: AdminToken, conn: DbConn) -> EmptyResult {
     let org = Organization::find_by_uuid(&uuid, &conn).await.map_res("Organization doesn't exist")?;
     org.delete(&conn).await
@@ -487,7 +472,6 @@ async fn has_http_access() -> bool {
     }
 }
 
-#[get("/diagnostics")]
 async fn diagnostics(_token: AdminToken, ip_header: IpHeader, conn: DbConn) -> ApiResult<Html<String>> {
     use crate::util::read_file_string;
     use chrono::prelude::*;
@@ -588,24 +572,20 @@ async fn diagnostics(_token: AdminToken, ip_header: IpHeader, conn: DbConn) -> A
     Ok(Html(text))
 }
 
-#[get("/diagnostics/config")]
 fn get_diagnostics_config(_token: AdminToken) -> Json<Value> {
     let support_json = CONFIG.get_support_json();
     Json(support_json)
 }
 
-#[post("/config", data = "<data>")]
 fn post_config(data: Json<ConfigBuilder>, _token: AdminToken) -> EmptyResult {
     let data: ConfigBuilder = data.into_inner();
     CONFIG.update_config(data)
 }
 
-#[post("/config/delete")]
 fn delete_config(_token: AdminToken) -> EmptyResult {
     CONFIG.delete_user_config()
 }
 
-#[post("/config/backup_db")]
 async fn backup_db(_token: AdminToken, conn: DbConn) -> EmptyResult {
     if *CAN_BACKUP {
         backup_database(&conn).await

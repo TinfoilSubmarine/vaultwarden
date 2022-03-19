@@ -1,5 +1,9 @@
 use chrono::Utc;
-use rocket::serde::json::Json;
+use axum::{
+    Json,
+    Router,
+    routing::{post, get, put, delete},
+};
 use serde_json::Value;
 
 use crate::{
@@ -10,33 +14,32 @@ use crate::{
     mail, CONFIG,
 };
 
-pub fn routes() -> Vec<rocket::Route> {
-    routes![
-        register,
-        profile,
-        put_profile,
-        post_profile,
-        get_public_keys,
-        post_keys,
-        post_password,
-        post_kdf,
-        post_rotatekey,
-        post_sstamp,
-        post_email_token,
-        post_email,
-        post_verify_email,
-        post_verify_email_token,
-        post_delete_recover,
-        post_delete_recover_token,
-        delete_account,
-        post_delete_account,
-        revision_date,
-        password_hint,
-        prelogin,
-        verify_password,
-        api_key,
-        rotate_api_key,
-    ]
+pub fn routes() -> Router {
+    Router::new()
+        .route("/accounts/register", post(register))
+        .route("/accounts/profile", get(profile))
+        .route("/accounts/profile", put(put_profile))
+        .route("/accounts/profile", post(post_profile))
+        .route("/users/:uuid/public-key", get(get_public_keys))
+        .route("/accounts/keys", post(post_keys))
+        .route("/accounts/password", post(post_password))
+        .route("/accounts/kdf", post(post_kdf))
+        .route("/accounts/key", post(post_rotatekey))
+        .route("/accounts/security-stamp", post(post_sstamp))
+        .route("/accounts/email-token", post(post_email_token))
+        .route("/accounts/email", post(post_email))
+        .route("/accounts/verify-email", post(post_verify_email))
+        .route("/accounts/verify-email-token", post(post_verify_email_token))
+        .route("/accounts/delete-recover", post(post_delete_recover))
+        .route("/accounts/delete-recover-token", post(post_delete_recover_token))
+        .route("/accounts", delete(delete_account))
+        .route("/accounts/delete", post(post_delete_account))
+        .route("/accounts/revision-date", get(revision_date))
+        .route("/accounts/password-hint", post(password_hint))
+        .route("/accounts/prelogin", post(prelogin))
+        .route("/accounts/verify-password", post(verify_password))
+        .route("/accounts/api-key", post(api_key))
+        .route("/accounts/rotate-api-key", post(rotate_api_key))
 }
 
 #[derive(Deserialize, Debug)]
@@ -62,7 +65,6 @@ struct KeysData {
     PublicKey: String,
 }
 
-#[post("/accounts/register", data = "<data>")]
 async fn register(data: JsonUpcase<RegisterData>, conn: DbConn) -> EmptyResult {
     let data: RegisterData = data.into_inner().data;
     let email = data.Email.to_lowercase();
@@ -153,7 +155,6 @@ async fn register(data: JsonUpcase<RegisterData>, conn: DbConn) -> EmptyResult {
     user.save(&conn).await
 }
 
-#[get("/accounts/profile")]
 async fn profile(headers: Headers, conn: DbConn) -> Json<Value> {
     Json(headers.user.to_json(&conn).await)
 }
@@ -167,12 +168,10 @@ struct ProfileData {
     Name: String,
 }
 
-#[put("/accounts/profile", data = "<data>")]
 async fn put_profile(data: JsonUpcase<ProfileData>, headers: Headers, conn: DbConn) -> JsonResult {
     post_profile(data, headers, conn).await
 }
 
-#[post("/accounts/profile", data = "<data>")]
 async fn post_profile(data: JsonUpcase<ProfileData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: ProfileData = data.into_inner().data;
 
@@ -187,7 +186,6 @@ async fn post_profile(data: JsonUpcase<ProfileData>, headers: Headers, conn: DbC
     Ok(Json(user.to_json(&conn).await))
 }
 
-#[get("/users/<uuid>/public-key")]
 async fn get_public_keys(uuid: String, _headers: Headers, conn: DbConn) -> JsonResult {
     let user = match User::find_by_uuid(&uuid, &conn).await {
         Some(user) => user,
@@ -201,7 +199,6 @@ async fn get_public_keys(uuid: String, _headers: Headers, conn: DbConn) -> JsonR
     })))
 }
 
-#[post("/accounts/keys", data = "<data>")]
 async fn post_keys(data: JsonUpcase<KeysData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: KeysData = data.into_inner().data;
 
@@ -227,7 +224,6 @@ struct ChangePassData {
     Key: String,
 }
 
-#[post("/accounts/password", data = "<data>")]
 async fn post_password(data: JsonUpcase<ChangePassData>, headers: Headers, conn: DbConn) -> EmptyResult {
     let data: ChangePassData = data.into_inner().data;
     let mut user = headers.user;
@@ -255,7 +251,6 @@ struct ChangeKdfData {
     Key: String,
 }
 
-#[post("/accounts/kdf", data = "<data>")]
 async fn post_kdf(data: JsonUpcase<ChangeKdfData>, headers: Headers, conn: DbConn) -> EmptyResult {
     let data: ChangeKdfData = data.into_inner().data;
     let mut user = headers.user;
@@ -290,7 +285,6 @@ struct KeyData {
     MasterPasswordHash: String,
 }
 
-#[post("/accounts/key", data = "<data>")]
 async fn post_rotatekey(data: JsonUpcase<KeyData>, headers: Headers, conn: DbConn, nt: Notify<'_>) -> EmptyResult {
     let data: KeyData = data.into_inner().data;
 
@@ -343,7 +337,6 @@ async fn post_rotatekey(data: JsonUpcase<KeyData>, headers: Headers, conn: DbCon
     user.save(&conn).await
 }
 
-#[post("/accounts/security-stamp", data = "<data>")]
 async fn post_sstamp(data: JsonUpcase<PasswordData>, headers: Headers, conn: DbConn) -> EmptyResult {
     let data: PasswordData = data.into_inner().data;
     let mut user = headers.user;
@@ -364,7 +357,6 @@ struct EmailTokenData {
     NewEmail: String,
 }
 
-#[post("/accounts/email-token", data = "<data>")]
 async fn post_email_token(data: JsonUpcase<EmailTokenData>, headers: Headers, conn: DbConn) -> EmptyResult {
     let data: EmailTokenData = data.into_inner().data;
     let mut user = headers.user;
@@ -405,7 +397,6 @@ struct ChangeEmailData {
     Token: NumberOrString,
 }
 
-#[post("/accounts/email", data = "<data>")]
 async fn post_email(data: JsonUpcase<ChangeEmailData>, headers: Headers, conn: DbConn) -> EmptyResult {
     let data: ChangeEmailData = data.into_inner().data;
     let mut user = headers.user;
@@ -452,7 +443,6 @@ async fn post_email(data: JsonUpcase<ChangeEmailData>, headers: Headers, conn: D
     user.save(&conn).await
 }
 
-#[post("/accounts/verify-email")]
 fn post_verify_email(headers: Headers) -> EmptyResult {
     let user = headers.user;
 
@@ -474,7 +464,6 @@ struct VerifyEmailTokenData {
     Token: String,
 }
 
-#[post("/accounts/verify-email-token", data = "<data>")]
 async fn post_verify_email_token(data: JsonUpcase<VerifyEmailTokenData>, conn: DbConn) -> EmptyResult {
     let data: VerifyEmailTokenData = data.into_inner().data;
 
@@ -506,7 +495,6 @@ struct DeleteRecoverData {
     Email: String,
 }
 
-#[post("/accounts/delete-recover", data = "<data>")]
 async fn post_delete_recover(data: JsonUpcase<DeleteRecoverData>, conn: DbConn) -> EmptyResult {
     let data: DeleteRecoverData = data.into_inner().data;
 
@@ -533,7 +521,6 @@ struct DeleteRecoverTokenData {
     Token: String,
 }
 
-#[post("/accounts/delete-recover-token", data = "<data>")]
 async fn post_delete_recover_token(data: JsonUpcase<DeleteRecoverTokenData>, conn: DbConn) -> EmptyResult {
     let data: DeleteRecoverTokenData = data.into_inner().data;
 
@@ -552,12 +539,10 @@ async fn post_delete_recover_token(data: JsonUpcase<DeleteRecoverTokenData>, con
     user.delete(&conn).await
 }
 
-#[post("/accounts/delete", data = "<data>")]
 async fn post_delete_account(data: JsonUpcase<PasswordData>, headers: Headers, conn: DbConn) -> EmptyResult {
     delete_account(data, headers, conn).await
 }
 
-#[delete("/accounts", data = "<data>")]
 async fn delete_account(data: JsonUpcase<PasswordData>, headers: Headers, conn: DbConn) -> EmptyResult {
     let data: PasswordData = data.into_inner().data;
     let user = headers.user;
@@ -569,7 +554,6 @@ async fn delete_account(data: JsonUpcase<PasswordData>, headers: Headers, conn: 
     user.delete(&conn).await
 }
 
-#[get("/accounts/revision-date")]
 fn revision_date(headers: Headers) -> String {
     let revision_date = headers.user.updated_at.timestamp_millis();
     revision_date.to_string()
@@ -581,7 +565,6 @@ struct PasswordHintData {
     Email: String,
 }
 
-#[post("/accounts/password-hint", data = "<data>")]
 async fn password_hint(data: JsonUpcase<PasswordHintData>, conn: DbConn) -> EmptyResult {
     if !CONFIG.mail_enabled() && !CONFIG.show_password_hint() {
         err!("This server is not configured to provide password hints.");
@@ -630,7 +613,6 @@ struct PreloginData {
     Email: String,
 }
 
-#[post("/accounts/prelogin", data = "<data>")]
 async fn prelogin(data: JsonUpcase<PreloginData>, conn: DbConn) -> Json<Value> {
     let data: PreloginData = data.into_inner().data;
 
@@ -652,7 +634,6 @@ struct SecretVerificationRequest {
     MasterPasswordHash: String,
 }
 
-#[post("/accounts/verify-password", data = "<data>")]
 fn verify_password(data: JsonUpcase<SecretVerificationRequest>, headers: Headers) -> EmptyResult {
     let data: SecretVerificationRequest = data.into_inner().data;
     let user = headers.user;
@@ -688,12 +669,10 @@ async fn _api_key(
     })))
 }
 
-#[post("/accounts/api-key", data = "<data>")]
 async fn api_key(data: JsonUpcase<SecretVerificationRequest>, headers: Headers, conn: DbConn) -> JsonResult {
     _api_key(data, false, headers, conn).await
 }
 
-#[post("/accounts/rotate-api-key", data = "<data>")]
 async fn rotate_api_key(data: JsonUpcase<SecretVerificationRequest>, headers: Headers, conn: DbConn) -> JsonResult {
     _api_key(data, true, headers, conn).await
 }

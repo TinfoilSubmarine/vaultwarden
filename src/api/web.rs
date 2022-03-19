@@ -1,7 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use rocket::serde::json::Json;
-use rocket::{fs::NamedFile, http::ContentType, Route};
+use rocket::{fs::NamedFile, http::ContentType};
+use axum::{
+    Json,
+    Router,
+    routing::get,
+};
 use serde_json::Value;
 
 use crate::{
@@ -10,22 +14,29 @@ use crate::{
     CONFIG,
 };
 
-pub fn routes() -> Vec<Route> {
+pub fn routes() -> Router {
     // If addding more routes here, consider also adding them to
     // crate::utils::LOGGED_ROUTES to make sure they appear in the log
     if CONFIG.web_vault_enabled() {
-        routes![web_index, app_id, web_files, attachments, alive, static_files]
+        Router::new()
+            .route("/", get(web_index))
+            .route("/app-id.json", get(app_id))
+            .route("/*p", get(web_files)) // Only match this if the other routes don't match
+            .route("/attachments/:uuid/:file_id", get(attachments))
+            .route("/alive", get(alive))
+            .route("/vw_static/:filename", get(static_files))
     } else {
-        routes![attachments, alive, static_files]
+        Router::new()
+            .route("/attachments/:uuid/:file_id", get(attachments))
+            .route("/alive", get(alive))
+            .route("/vw_static/:filename", get(static_files))
     }
 }
 
-#[get("/")]
 async fn web_index() -> Cached<Option<NamedFile>> {
     Cached::short(NamedFile::open(Path::new(&CONFIG.web_vault_folder()).join("index.html")).await.ok(), false)
 }
 
-#[get("/app-id.json")]
 fn app_id() -> Cached<(ContentType, Json<Value>)> {
     let content_type = ContentType::new("application", "fido.trusted-apps+json");
 
@@ -57,19 +68,16 @@ fn app_id() -> Cached<(ContentType, Json<Value>)> {
     )
 }
 
-#[get("/<p..>", rank = 10)] // Only match this if the other routes don't match
 async fn web_files(p: PathBuf) -> Cached<Option<NamedFile>> {
     Cached::long(NamedFile::open(Path::new(&CONFIG.web_vault_folder()).join(p)).await.ok(), true)
 }
 
-#[get("/attachments/<uuid>/<file_id>")]
 async fn attachments(uuid: SafeString, file_id: SafeString) -> Option<NamedFile> {
     NamedFile::open(Path::new(&CONFIG.attachments_folder()).join(uuid).join(file_id)).await.ok()
 }
 
 // We use DbConn here to let the alive healthcheck also verify the database connection.
 use crate::db::DbConn;
-#[get("/alive")]
 fn alive(_conn: DbConn) -> Json<String> {
     use crate::util::format_date;
     use chrono::Utc;
@@ -77,7 +85,6 @@ fn alive(_conn: DbConn) -> Json<String> {
     Json(format_date(&Utc::now().naive_utc()))
 }
 
-#[get("/vw_static/<filename>")]
 fn static_files(filename: String) -> Result<(ContentType, &'static [u8]), Error> {
     match filename.as_ref() {
         "mail-github.png" => Ok((ContentType::PNG, include_bytes!("../static/images/mail-github.png"))),

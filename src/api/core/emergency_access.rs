@@ -1,6 +1,9 @@
 use chrono::{Duration, Utc};
-use rocket::serde::json::Json;
-use rocket::Route;
+use axum::{
+    Json,
+    Router,
+    routing::{get, put, delete, post},
+};
 use serde_json::Value;
 use std::borrow::Borrow;
 
@@ -13,31 +16,29 @@ use crate::{
 
 use futures::{stream, stream::StreamExt};
 
-pub fn routes() -> Vec<Route> {
-    routes![
-        get_contacts,
-        get_grantees,
-        get_emergency_access,
-        put_emergency_access,
-        delete_emergency_access,
-        post_delete_emergency_access,
-        send_invite,
-        resend_invite,
-        accept_invite,
-        confirm_emergency_access,
-        initiate_emergency_access,
-        approve_emergency_access,
-        reject_emergency_access,
-        takeover_emergency_access,
-        password_emergency_access,
-        view_emergency_access,
-        policies_emergency_access,
-    ]
+pub fn routes() -> Router {
+    Router::new()
+        .route("/emergency-access/trusted", get(get_contacts))
+        .route("/emergency-access/granted", get(get_grantees))
+        .route("/emergency-access/:emer_id", get(get_emergency_access))
+        .route("/emergency-access/:emer_id", put(put_emergency_access))
+        .route("/emergency-access/:emer_id", delete(delete_emergency_access))
+        .route("/emergency-access/:emer_id/delete", post(post_delete_emergency_access))
+        .route("/emergency-access/invite", post(send_invite))
+        .route("/emergency-access/:emer_id/reinvite", post(resend_invite))
+        .route("/emergency-access/:emer_id/accept", post(accept_invite))
+        .route("/emergency-access/:emer_id/confirm", post(confirm_emergency_access))
+        .route("/emergency-access/:emer_id/initiate", post(initiate_emergency_access))
+        .route("/emergency-access/:emer_id/approve", post(approve_emergency_access))
+        .route("/emergency-access/:emer_id/reject", post(reject_emergency_access))
+        .route("/emergency-access/:emer_id/takeover", post(takeover_emergency_access))
+        .route("/emergency-access/:emer_id/password", post(password_emergency_access))
+        .route("/emergency-access/:emer_id/view", post(view_emergency_access))
+        .route("/emergency-access/:emer_id/policies", get(policies_emergency_access))
 }
 
 // region get
 
-#[get("/emergency-access/trusted")]
 async fn get_contacts(headers: Headers, conn: DbConn) -> JsonResult {
     check_emergency_access_allowed()?;
 
@@ -57,7 +58,6 @@ async fn get_contacts(headers: Headers, conn: DbConn) -> JsonResult {
     })))
 }
 
-#[get("/emergency-access/granted")]
 async fn get_grantees(headers: Headers, conn: DbConn) -> JsonResult {
     check_emergency_access_allowed()?;
 
@@ -77,7 +77,6 @@ async fn get_grantees(headers: Headers, conn: DbConn) -> JsonResult {
     })))
 }
 
-#[get("/emergency-access/<emer_id>")]
 async fn get_emergency_access(emer_id: String, conn: DbConn) -> JsonResult {
     check_emergency_access_allowed()?;
 
@@ -99,7 +98,6 @@ struct EmergencyAccessUpdateData {
     KeyEncrypted: Option<String>,
 }
 
-#[put("/emergency-access/<emer_id>", data = "<data>")]
 async fn put_emergency_access(
     emer_id: String,
     data: JsonUpcase<EmergencyAccessUpdateData>,
@@ -140,7 +138,6 @@ async fn post_emergency_access(
 
 // region delete
 
-#[delete("/emergency-access/<emer_id>")]
 async fn delete_emergency_access(emer_id: String, headers: Headers, conn: DbConn) -> EmptyResult {
     check_emergency_access_allowed()?;
 
@@ -159,7 +156,6 @@ async fn delete_emergency_access(emer_id: String, headers: Headers, conn: DbConn
     Ok(())
 }
 
-#[post("/emergency-access/<emer_id>/delete")]
 async fn post_delete_emergency_access(emer_id: String, headers: Headers, conn: DbConn) -> EmptyResult {
     delete_emergency_access(emer_id, headers, conn).await
 }
@@ -176,7 +172,6 @@ struct EmergencyAccessInviteData {
     WaitTimeDays: i32,
 }
 
-#[post("/emergency-access/invite", data = "<data>")]
 async fn send_invite(data: JsonUpcase<EmergencyAccessInviteData>, headers: Headers, conn: DbConn) -> EmptyResult {
     check_emergency_access_allowed()?;
 
@@ -265,7 +260,6 @@ async fn send_invite(data: JsonUpcase<EmergencyAccessInviteData>, headers: Heade
     Ok(())
 }
 
-#[post("/emergency-access/<emer_id>/reinvite")]
 async fn resend_invite(emer_id: String, headers: Headers, conn: DbConn) -> EmptyResult {
     check_emergency_access_allowed()?;
 
@@ -326,7 +320,6 @@ struct AcceptData {
     Token: String,
 }
 
-#[post("/emergency-access/<emer_id>/accept", data = "<data>")]
 async fn accept_invite(emer_id: String, data: JsonUpcase<AcceptData>, conn: DbConn) -> EmptyResult {
     check_emergency_access_allowed()?;
 
@@ -404,7 +397,6 @@ struct ConfirmData {
     Key: String,
 }
 
-#[post("/emergency-access/<emer_id>/confirm", data = "<data>")]
 async fn confirm_emergency_access(
     emer_id: String,
     data: JsonUpcase<ConfirmData>,
@@ -458,7 +450,6 @@ async fn confirm_emergency_access(
 
 // region access emergency access
 
-#[post("/emergency-access/<emer_id>/initiate")]
 async fn initiate_emergency_access(emer_id: String, headers: Headers, conn: DbConn) -> JsonResult {
     check_emergency_access_allowed()?;
 
@@ -497,7 +488,6 @@ async fn initiate_emergency_access(emer_id: String, headers: Headers, conn: DbCo
     Ok(Json(emergency_access.to_json()))
 }
 
-#[post("/emergency-access/<emer_id>/approve")]
 async fn approve_emergency_access(emer_id: String, headers: Headers, conn: DbConn) -> JsonResult {
     check_emergency_access_allowed()?;
 
@@ -536,7 +526,6 @@ async fn approve_emergency_access(emer_id: String, headers: Headers, conn: DbCon
     }
 }
 
-#[post("/emergency-access/<emer_id>/reject")]
 async fn reject_emergency_access(emer_id: String, headers: Headers, conn: DbConn) -> JsonResult {
     check_emergency_access_allowed()?;
 
@@ -580,7 +569,6 @@ async fn reject_emergency_access(emer_id: String, headers: Headers, conn: DbConn
 
 // region action
 
-#[post("/emergency-access/<emer_id>/view")]
 async fn view_emergency_access(emer_id: String, headers: Headers, conn: DbConn) -> JsonResult {
     check_emergency_access_allowed()?;
 
@@ -610,7 +598,6 @@ async fn view_emergency_access(emer_id: String, headers: Headers, conn: DbConn) 
     })))
 }
 
-#[post("/emergency-access/<emer_id>/takeover")]
 async fn takeover_emergency_access(emer_id: String, headers: Headers, conn: DbConn) -> JsonResult {
     check_emergency_access_allowed()?;
 
@@ -644,7 +631,6 @@ struct EmergencyAccessPasswordData {
     Key: String,
 }
 
-#[post("/emergency-access/<emer_id>/password", data = "<data>")]
 async fn password_emergency_access(
     emer_id: String,
     data: JsonUpcase<EmergencyAccessPasswordData>,
@@ -691,7 +677,6 @@ async fn password_emergency_access(
 
 // endregion
 
-#[get("/emergency-access/<emer_id>/policies")]
 async fn policies_emergency_access(emer_id: String, headers: Headers, conn: DbConn) -> JsonResult {
     let requesting_user = headers.user;
     let emergency_access = match EmergencyAccess::find_by_uuid(&emer_id, &conn).await {

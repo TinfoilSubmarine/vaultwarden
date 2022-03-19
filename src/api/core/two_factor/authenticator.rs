@@ -1,6 +1,9 @@
 use data_encoding::BASE32;
-use rocket::serde::json::Json;
-use rocket::Route;
+use axum::{
+    Json,
+    Router,
+    routing::{post, put},
+};
 
 use crate::{
     api::{
@@ -16,11 +19,13 @@ use crate::{
 
 pub use crate::config::CONFIG;
 
-pub fn routes() -> Vec<Route> {
-    routes![generate_authenticator, activate_authenticator, activate_authenticator_put,]
+pub fn routes() -> Router {
+    Router::new()
+        .mount("/two-factor/get-authenticator", post(generate_authenticator))
+        .mount("/two-factor/authenticator", post(activate_authenticator))
+        .mount("/two-factor/authenticator", put(activate_authenticator_put))
 }
 
-#[post("/two-factor/get-authenticator", data = "<data>")]
 async fn generate_authenticator(data: JsonUpcase<PasswordData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: PasswordData = data.into_inner().data;
     let user = headers.user;
@@ -52,7 +57,6 @@ struct EnableAuthenticatorData {
     Token: NumberOrString,
 }
 
-#[post("/two-factor/authenticator", data = "<data>")]
 async fn activate_authenticator(
     data: JsonUpcase<EnableAuthenticatorData>,
     headers: Headers,
@@ -92,7 +96,6 @@ async fn activate_authenticator(
     })))
 }
 
-#[put("/two-factor/authenticator", data = "<data>")]
 async fn activate_authenticator_put(
     data: JsonUpcase<EnableAuthenticatorData>,
     headers: Headers,

@@ -1,6 +1,9 @@
 use chrono::{Duration, NaiveDateTime, Utc};
-use rocket::serde::json::Json;
-use rocket::Route;
+use axum::{
+    Json,
+    Router,
+    routing::{post, put},
+};
 
 use crate::{
     api::{core::two_factor::_generate_recover_code, EmptyResult, JsonResult, JsonUpcase, PasswordData},
@@ -15,7 +18,11 @@ use crate::{
 };
 
 pub fn routes() -> Vec<Route> {
-    routes![get_email, send_email_login, send_email, email,]
+    Router::new()
+        .route("/two-factor/get-email", post(get_email))
+        .route("/two-factor/send-email-login", post(send_email_login))
+        .route("/two-factor/send-email", post(send_email))
+        .route("/two-factor/email", put(email))
 }
 
 #[derive(Deserialize)]
@@ -27,7 +34,6 @@ struct SendEmailLoginData {
 
 /// User is trying to login and wants to use email 2FA.
 /// Does not require Bearer token
-#[post("/two-factor/send-email-login", data = "<data>")] // JsonResult
 async fn send_email_login(data: JsonUpcase<SendEmailLoginData>, conn: DbConn) -> EmptyResult {
     let data: SendEmailLoginData = data.into_inner().data;
 
@@ -72,7 +78,6 @@ pub async fn send_token(user_uuid: &str, conn: &DbConn) -> EmptyResult {
 }
 
 /// When user clicks on Manage email 2FA show the user the related information
-#[post("/two-factor/get-email", data = "<data>")]
 async fn get_email(data: JsonUpcase<PasswordData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: PasswordData = data.into_inner().data;
     let user = headers.user;
@@ -106,7 +111,6 @@ struct SendEmailData {
 }
 
 /// Send a verification email to the specified email address to check whether it exists/belongs to user.
-#[post("/two-factor/send-email", data = "<data>")]
 async fn send_email(data: JsonUpcase<SendEmailData>, headers: Headers, conn: DbConn) -> EmptyResult {
     let data: SendEmailData = data.into_inner().data;
     let user = headers.user;
@@ -146,7 +150,6 @@ struct EmailData {
 }
 
 /// Verify email belongs to user and can be used for 2FA email codes.
-#[put("/two-factor/email", data = "<data>")]
 async fn email(data: JsonUpcase<EmailData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: EmailData = data.into_inner().data;
     let mut user = headers.user;

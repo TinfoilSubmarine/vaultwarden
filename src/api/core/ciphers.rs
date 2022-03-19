@@ -2,10 +2,13 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::{NaiveDateTime, Utc};
 use rocket::fs::TempFile;
-use rocket::serde::json::Json;
 use rocket::{
     form::{Form, FromForm},
-    Route,
+};
+use axum::{
+    Json,
+    Router,
+    routing::{get, post, delete, put},
 };
 use serde_json::Value;
 
@@ -19,7 +22,7 @@ use crate::{
 
 use futures::{stream, stream::StreamExt};
 
-pub fn routes() -> Vec<Route> {
+pub fn routes() -> Router {
     // Note that many routes have an `admin` variant; this seems to be
     // because the stored procedure that upstream Bitwarden uses to determine
     // whether the user can edit a cipher doesn't take into account whether
@@ -30,56 +33,55 @@ pub fn routes() -> Vec<Route> {
     // vaultwarden factors in the org owner/admin status as part of
     // determining the write accessibility of a cipher, so most
     // admin/non-admin implementations can be shared.
-    routes![
-        sync,
-        get_ciphers,
-        get_cipher,
-        get_cipher_admin,
-        get_cipher_details,
-        post_ciphers,
-        put_cipher_admin,
-        post_ciphers_admin,
-        post_ciphers_create,
-        post_ciphers_import,
-        get_attachment,
-        post_attachment_v2,
-        post_attachment_v2_data,
-        post_attachment,       // legacy
-        post_attachment_admin, // legacy
-        post_attachment_share,
-        delete_attachment_post,
-        delete_attachment_post_admin,
-        delete_attachment,
-        delete_attachment_admin,
-        post_cipher_admin,
-        post_cipher_share,
-        put_cipher_share,
-        put_cipher_share_selected,
-        post_cipher,
-        put_cipher,
-        delete_cipher_post,
-        delete_cipher_post_admin,
-        delete_cipher_put,
-        delete_cipher_put_admin,
-        delete_cipher,
-        delete_cipher_admin,
-        delete_cipher_selected,
-        delete_cipher_selected_post,
-        delete_cipher_selected_put,
-        delete_cipher_selected_admin,
-        delete_cipher_selected_post_admin,
-        delete_cipher_selected_put_admin,
-        restore_cipher_put,
-        restore_cipher_put_admin,
-        restore_cipher_selected,
-        delete_all,
-        move_cipher_selected,
-        move_cipher_selected_put,
-        put_collections_update,
-        post_collections_update,
-        post_collections_admin,
-        put_collections_admin,
-    ]
+    Router::new()
+        .mount("/sync?*data", get(sync))
+        .mount("/ciphers", get(get_ciphers))
+        .mount("/ciphers/:uuid", get(get_cipher))
+        .mount("/ciphers/:uuid/admin", get(get_cipher_admin))
+        .mount("/ciphers/:uuid/details", get(get_cipher_details))
+        .mount("/ciphers", post(post_ciphers))
+        .mount("/ciphers/:uuid/admin", put(put_cipher_admin))
+        .mount("/ciphers/admin", post(post_ciphers_admin))
+        .mount("/ciphers/create", post(post_ciphers_create))
+        .mount("/ciphers/import", post(post_ciphers_import))
+        .mount("/ciphers/:uuid/attachment/:attachment_id", get(get_attachment))
+        .mount("/ciphers/:uuid/attachment/v2", post(post_attachment_v2))
+        .mount("/ciphers/:uuid/attachment/:attachment_id", post(post_attachment_v2_data))
+        .mount("/ciphers/:uuid/attachment", post(post_attachment))              // legacy
+        .mount("/ciphers/:uuid/attachment-admin", post(post_attachment_admin))  // legacy
+        .mount("/ciphers/:uuid/attachment/:attachment_id/share", post(post_attachment_share))
+        .mount("/ciphers/:uuid/attachment/:attachment_id/delete", post(delete_attachment_post))
+        .mount("/ciphers/:uuid/attachment/:attachment_id/delete-admin", post(delete_attachment_post_admin))
+        .mount("/ciphers/:uuid/attachment/:attachment_id", delete(delete_attachment))
+        .mount("/ciphers/:uuid/attachment/:attachment_id/admin", delete(delete_attachment_admin))
+        .mount("/ciphers/:uuid/admin", post(post_cipher_admin))
+        .mount("/ciphers/:uuid/share", post(post_cipher_share))
+        .mount("/ciphers/:uuid/share", put(put_cipher_share))
+        .mount("/ciphers/share", put(put_cipher_share_selected))
+        .mount("/ciphers/:uuid", post(post_cipher))
+        .mount("/ciphers/:uuid", put(put_cipher))
+        .mount("/ciphers/:uuid/delete", post(delete_cipher_post))
+        .mount("/ciphers/:uuid/delete-admin", post(delete_cipher_post_admin))
+        .mount("/ciphers/:uuid/delete", put(delete_cipher_put))
+        .mount("/ciphers/:uuid/delete-admin", put(delete_cipher_put_admin))
+        .mount("/ciphers/:uuid", delete(delete_cipher))
+        .mount("/ciphers/:uuid/admin", delete(delete_cipher_admin))
+        .mount("/ciphers", delete(delete_cipher_selected))
+        .mount("/ciphers/delete", post(delete_cipher_selected_post))
+        .mount("/ciphers/delete", put(delete_cipher_selected_put))
+        .mount("/ciphers/admin", delete(delete_cipher_selected_admin))
+        .mount("/ciphers/delete-admin", post(delete_cipher_selected_post_admin))
+        .mount("/ciphers/delete-admin", put(delete_cipher_selected_put_admin))
+        .mount("/ciphers/:uuid/restore", put(restore_cipher_put))
+        .mount("/ciphers/:uuid/restore-admin", put(restore_cipher_put_admin))
+        .mount("/ciphers/restore", put(restore_cipher_selected))
+        .mount("/ciphers/purge?*organization", post(delete_all))
+        .mount("/ciphers/move", post(move_cipher_selected))
+        .mount("/ciphers/move", put(move_cipher_selected_put))
+        .mount("/ciphers/:uuid/collections", put(put_collections_update))
+        .mount("/ciphers/:uuid/collections", post(post_collections_update))
+        .mount("/ciphers/:uuid/collections-admin", post(post_collections_admin))
+        .mount("/ciphers/:uuid/collections-admin", put(put_collections_admin))
 }
 
 pub async fn purge_trashed_ciphers(pool: DbPool) {
@@ -97,7 +99,6 @@ struct SyncData {
     exclude_domains: bool, // Default: 'false'
 }
 
-#[get("/sync?<data..>")]
 async fn sync(data: SyncData, headers: Headers, conn: DbConn) -> Json<Value> {
     let user_json = headers.user.to_json(&conn).await;
 
@@ -145,7 +146,6 @@ async fn sync(data: SyncData, headers: Headers, conn: DbConn) -> Json<Value> {
     }))
 }
 
-#[get("/ciphers")]
 async fn get_ciphers(headers: Headers, conn: DbConn) -> Json<Value> {
     let ciphers_json = stream::iter(Cipher::find_by_user_visible(&headers.user.uuid, &conn).await)
         .then(|c| async {
@@ -162,7 +162,6 @@ async fn get_ciphers(headers: Headers, conn: DbConn) -> Json<Value> {
     }))
 }
 
-#[get("/ciphers/<uuid>")]
 async fn get_cipher(uuid: String, headers: Headers, conn: DbConn) -> JsonResult {
     let cipher = match Cipher::find_by_uuid(&uuid, &conn).await {
         Some(cipher) => cipher,
@@ -176,13 +175,11 @@ async fn get_cipher(uuid: String, headers: Headers, conn: DbConn) -> JsonResult 
     Ok(Json(cipher.to_json(&headers.host, &headers.user.uuid, &conn).await))
 }
 
-#[get("/ciphers/<uuid>/admin")]
 async fn get_cipher_admin(uuid: String, headers: Headers, conn: DbConn) -> JsonResult {
     // TODO: Implement this correctly
     get_cipher(uuid, headers, conn).await
 }
 
-#[get("/ciphers/<uuid>/details")]
 async fn get_cipher_details(uuid: String, headers: Headers, conn: DbConn) -> JsonResult {
     get_cipher(uuid, headers, conn).await
 }
@@ -241,7 +238,6 @@ pub struct Attachments2Data {
 }
 
 /// Called when an org admin clones an org cipher.
-#[post("/ciphers/admin", data = "<data>")]
 async fn post_ciphers_admin(
     data: JsonUpcase<ShareCipherData>,
     headers: Headers,
@@ -254,7 +250,6 @@ async fn post_ciphers_admin(
 /// Called when creating a new org-owned cipher, or cloning a cipher (whether
 /// user- or org-owned). When cloning a cipher to a user-owned cipher,
 /// `organizationId` is null.
-#[post("/ciphers/create", data = "<data>")]
 async fn post_ciphers_create(
     data: JsonUpcase<ShareCipherData>,
     headers: Headers,
@@ -290,7 +285,6 @@ async fn post_ciphers_create(
 }
 
 /// Called when creating a new user-owned cipher.
-#[post("/ciphers", data = "<data>")]
 async fn post_ciphers(data: JsonUpcase<CipherData>, headers: Headers, conn: DbConn, nt: Notify<'_>) -> JsonResult {
     let mut data: CipherData = data.into_inner().data;
 
@@ -480,7 +474,6 @@ struct RelationsData {
     Value: usize,
 }
 
-#[post("/ciphers/import", data = "<data>")]
 async fn post_ciphers_import(
     data: JsonUpcase<ImportData>,
     headers: Headers,
@@ -523,7 +516,6 @@ async fn post_ciphers_import(
 }
 
 /// Called when an org admin modifies an existing org cipher.
-#[put("/ciphers/<uuid>/admin", data = "<data>")]
 async fn put_cipher_admin(
     uuid: String,
     data: JsonUpcase<CipherData>,
@@ -534,7 +526,6 @@ async fn put_cipher_admin(
     put_cipher(uuid, data, headers, conn, nt).await
 }
 
-#[post("/ciphers/<uuid>/admin", data = "<data>")]
 async fn post_cipher_admin(
     uuid: String,
     data: JsonUpcase<CipherData>,
@@ -545,7 +536,6 @@ async fn post_cipher_admin(
     post_cipher(uuid, data, headers, conn, nt).await
 }
 
-#[post("/ciphers/<uuid>", data = "<data>")]
 async fn post_cipher(
     uuid: String,
     data: JsonUpcase<CipherData>,
@@ -556,7 +546,6 @@ async fn post_cipher(
     put_cipher(uuid, data, headers, conn, nt).await
 }
 
-#[put("/ciphers/<uuid>", data = "<data>")]
 async fn put_cipher(
     uuid: String,
     data: JsonUpcase<CipherData>,
@@ -591,7 +580,6 @@ struct CollectionsAdminData {
     CollectionIds: Vec<String>,
 }
 
-#[put("/ciphers/<uuid>/collections", data = "<data>")]
 async fn put_collections_update(
     uuid: String,
     data: JsonUpcase<CollectionsAdminData>,
@@ -601,7 +589,6 @@ async fn put_collections_update(
     post_collections_admin(uuid, data, headers, conn).await
 }
 
-#[post("/ciphers/<uuid>/collections", data = "<data>")]
 async fn post_collections_update(
     uuid: String,
     data: JsonUpcase<CollectionsAdminData>,
@@ -611,7 +598,6 @@ async fn post_collections_update(
     post_collections_admin(uuid, data, headers, conn).await
 }
 
-#[put("/ciphers/<uuid>/collections-admin", data = "<data>")]
 async fn put_collections_admin(
     uuid: String,
     data: JsonUpcase<CollectionsAdminData>,
@@ -621,7 +607,6 @@ async fn put_collections_admin(
     post_collections_admin(uuid, data, headers, conn).await
 }
 
-#[post("/ciphers/<uuid>/collections-admin", data = "<data>")]
 async fn post_collections_admin(
     uuid: String,
     data: JsonUpcase<CollectionsAdminData>,
@@ -672,7 +657,6 @@ struct ShareCipherData {
     CollectionIds: Vec<String>,
 }
 
-#[post("/ciphers/<uuid>/share", data = "<data>")]
 async fn post_cipher_share(
     uuid: String,
     data: JsonUpcase<ShareCipherData>,
@@ -685,7 +669,6 @@ async fn post_cipher_share(
     share_cipher_by_uuid(&uuid, data, &headers, &conn, &nt).await
 }
 
-#[put("/ciphers/<uuid>/share", data = "<data>")]
 async fn put_cipher_share(
     uuid: String,
     data: JsonUpcase<ShareCipherData>,
@@ -705,7 +688,6 @@ struct ShareSelectedCipherData {
     CollectionIds: Vec<String>,
 }
 
-#[put("/ciphers/share", data = "<data>")]
 async fn put_cipher_share_selected(
     data: JsonUpcase<ShareSelectedCipherData>,
     headers: Headers,
@@ -806,7 +788,6 @@ async fn share_cipher_by_uuid(
 /// Upstream added this v2 API to support direct download of attachments from
 /// their object storage service. For self-hosted instances, it basically just
 /// redirects to the same location as before the v2 API.
-#[get("/ciphers/<uuid>/attachment/<attachment_id>")]
 async fn get_attachment(uuid: String, attachment_id: String, headers: Headers, conn: DbConn) -> JsonResult {
     match Attachment::find_by_id(&attachment_id, &conn).await {
         Some(attachment) if uuid == attachment.cipher_uuid => Ok(Json(attachment.to_json(&headers.host))),
@@ -833,7 +814,6 @@ enum FileUploadType {
 /// This redirects the client to the API it should use to upload the attachment.
 /// For upstream's cloud-hosted service, it's an Azure object storage API.
 /// For self-hosted instances, it's another API on the local instance.
-#[post("/ciphers/<uuid>/attachment/v2", data = "<data>")]
 async fn post_attachment_v2(
     uuid: String,
     data: JsonUpcase<AttachmentRequestData>,
@@ -1000,7 +980,6 @@ async fn save_attachment(
 /// This route needs a rank specified so that Rocket prioritizes the
 /// /ciphers/<uuid>/attachment/v2 route, which would otherwise conflict
 /// with this one.
-#[post("/ciphers/<uuid>/attachment/<attachment_id>", format = "multipart/form-data", data = "<data>", rank = 1)]
 async fn post_attachment_v2_data(
     uuid: String,
     attachment_id: String,
@@ -1021,7 +1000,6 @@ async fn post_attachment_v2_data(
 }
 
 /// Legacy API for creating an attachment associated with a cipher.
-#[post("/ciphers/<uuid>/attachment", format = "multipart/form-data", data = "<data>")]
 async fn post_attachment(
     uuid: String,
     data: Form<UploadData<'_>>,
@@ -1038,7 +1016,6 @@ async fn post_attachment(
     Ok(Json(cipher.to_json(&headers.host, &headers.user.uuid, &conn).await))
 }
 
-#[post("/ciphers/<uuid>/attachment-admin", format = "multipart/form-data", data = "<data>")]
 async fn post_attachment_admin(
     uuid: String,
     data: Form<UploadData<'_>>,
@@ -1049,7 +1026,6 @@ async fn post_attachment_admin(
     post_attachment(uuid, data, headers, conn, nt).await
 }
 
-#[post("/ciphers/<uuid>/attachment/<attachment_id>/share", format = "multipart/form-data", data = "<data>")]
 async fn post_attachment_share(
     uuid: String,
     attachment_id: String,
@@ -1062,7 +1038,6 @@ async fn post_attachment_share(
     post_attachment(uuid, data, headers, conn, nt).await
 }
 
-#[post("/ciphers/<uuid>/attachment/<attachment_id>/delete-admin")]
 async fn delete_attachment_post_admin(
     uuid: String,
     attachment_id: String,
@@ -1073,7 +1048,6 @@ async fn delete_attachment_post_admin(
     delete_attachment(uuid, attachment_id, headers, conn, nt).await
 }
 
-#[post("/ciphers/<uuid>/attachment/<attachment_id>/delete")]
 async fn delete_attachment_post(
     uuid: String,
     attachment_id: String,
@@ -1084,7 +1058,6 @@ async fn delete_attachment_post(
     delete_attachment(uuid, attachment_id, headers, conn, nt).await
 }
 
-#[delete("/ciphers/<uuid>/attachment/<attachment_id>")]
 async fn delete_attachment(
     uuid: String,
     attachment_id: String,
@@ -1095,7 +1068,6 @@ async fn delete_attachment(
     _delete_cipher_attachment_by_id(&uuid, &attachment_id, &headers, &conn, &nt).await
 }
 
-#[delete("/ciphers/<uuid>/attachment/<attachment_id>/admin")]
 async fn delete_attachment_admin(
     uuid: String,
     attachment_id: String,
@@ -1106,37 +1078,30 @@ async fn delete_attachment_admin(
     _delete_cipher_attachment_by_id(&uuid, &attachment_id, &headers, &conn, &nt).await
 }
 
-#[post("/ciphers/<uuid>/delete")]
 async fn delete_cipher_post(uuid: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> EmptyResult {
     _delete_cipher_by_uuid(&uuid, &headers, &conn, false, &nt).await
 }
 
-#[post("/ciphers/<uuid>/delete-admin")]
 async fn delete_cipher_post_admin(uuid: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> EmptyResult {
     _delete_cipher_by_uuid(&uuid, &headers, &conn, false, &nt).await
 }
 
-#[put("/ciphers/<uuid>/delete")]
 async fn delete_cipher_put(uuid: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> EmptyResult {
     _delete_cipher_by_uuid(&uuid, &headers, &conn, true, &nt).await
 }
 
-#[put("/ciphers/<uuid>/delete-admin")]
 async fn delete_cipher_put_admin(uuid: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> EmptyResult {
     _delete_cipher_by_uuid(&uuid, &headers, &conn, true, &nt).await
 }
 
-#[delete("/ciphers/<uuid>")]
 async fn delete_cipher(uuid: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> EmptyResult {
     _delete_cipher_by_uuid(&uuid, &headers, &conn, false, &nt).await
 }
 
-#[delete("/ciphers/<uuid>/admin")]
 async fn delete_cipher_admin(uuid: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> EmptyResult {
     _delete_cipher_by_uuid(&uuid, &headers, &conn, false, &nt).await
 }
 
-#[delete("/ciphers", data = "<data>")]
 async fn delete_cipher_selected(
     data: JsonUpcase<Value>,
     headers: Headers,
@@ -1146,7 +1111,6 @@ async fn delete_cipher_selected(
     _delete_multiple_ciphers(data, headers, conn, false, nt).await
 }
 
-#[post("/ciphers/delete", data = "<data>")]
 async fn delete_cipher_selected_post(
     data: JsonUpcase<Value>,
     headers: Headers,
@@ -1156,7 +1120,6 @@ async fn delete_cipher_selected_post(
     _delete_multiple_ciphers(data, headers, conn, false, nt).await
 }
 
-#[put("/ciphers/delete", data = "<data>")]
 async fn delete_cipher_selected_put(
     data: JsonUpcase<Value>,
     headers: Headers,
@@ -1166,7 +1129,6 @@ async fn delete_cipher_selected_put(
     _delete_multiple_ciphers(data, headers, conn, true, nt).await // soft delete
 }
 
-#[delete("/ciphers/admin", data = "<data>")]
 async fn delete_cipher_selected_admin(
     data: JsonUpcase<Value>,
     headers: Headers,
@@ -1176,7 +1138,6 @@ async fn delete_cipher_selected_admin(
     delete_cipher_selected(data, headers, conn, nt).await
 }
 
-#[post("/ciphers/delete-admin", data = "<data>")]
 async fn delete_cipher_selected_post_admin(
     data: JsonUpcase<Value>,
     headers: Headers,
@@ -1186,7 +1147,6 @@ async fn delete_cipher_selected_post_admin(
     delete_cipher_selected_post(data, headers, conn, nt).await
 }
 
-#[put("/ciphers/delete-admin", data = "<data>")]
 async fn delete_cipher_selected_put_admin(
     data: JsonUpcase<Value>,
     headers: Headers,
@@ -1196,17 +1156,14 @@ async fn delete_cipher_selected_put_admin(
     delete_cipher_selected_put(data, headers, conn, nt).await
 }
 
-#[put("/ciphers/<uuid>/restore")]
 async fn restore_cipher_put(uuid: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> JsonResult {
     _restore_cipher_by_uuid(&uuid, &headers, &conn, &nt).await
 }
 
-#[put("/ciphers/<uuid>/restore-admin")]
 async fn restore_cipher_put_admin(uuid: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> JsonResult {
     _restore_cipher_by_uuid(&uuid, &headers, &conn, &nt).await
 }
 
-#[put("/ciphers/restore", data = "<data>")]
 async fn restore_cipher_selected(
     data: JsonUpcase<Value>,
     headers: Headers,
@@ -1223,7 +1180,6 @@ struct MoveCipherData {
     Ids: Vec<String>,
 }
 
-#[post("/ciphers/move", data = "<data>")]
 async fn move_cipher_selected(
     data: JsonUpcase<MoveCipherData>,
     headers: Headers,
@@ -1263,7 +1219,6 @@ async fn move_cipher_selected(
     Ok(())
 }
 
-#[put("/ciphers/move", data = "<data>")]
 async fn move_cipher_selected_put(
     data: JsonUpcase<MoveCipherData>,
     headers: Headers,
@@ -1279,7 +1234,6 @@ struct OrganizationId {
     org_id: String,
 }
 
-#[post("/ciphers/purge?<organization..>", data = "<data>")]
 async fn delete_all(
     organization: Option<OrganizationId>,
     data: JsonUpcase<PasswordData>,

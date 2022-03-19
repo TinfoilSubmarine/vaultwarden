@@ -1,7 +1,10 @@
 use chrono::Utc;
 use data_encoding::BASE64;
-use rocket::serde::json::Json;
-use rocket::Route;
+use axum::{
+    Json,
+    Router,
+    routing::{post, put},
+};
 
 use crate::{
     api::{core::two_factor::_generate_recover_code, ApiResult, EmptyResult, JsonResult, JsonUpcase, PasswordData},
@@ -16,8 +19,11 @@ use crate::{
     CONFIG,
 };
 
-pub fn routes() -> Vec<Route> {
-    routes![get_duo, activate_duo, activate_duo_put,]
+pub fn routes() -> Router {
+    Router::new()
+        .route("/two-factor/get-duo", post(get_duo))
+        .route("/two-factor/duo", post(activate_duo))
+        .route("/two-factor/duo", put(activate_duo_put))
 }
 
 #[derive(Serialize, Deserialize)]
@@ -88,7 +94,6 @@ impl DuoStatus {
 
 const DISABLED_MESSAGE_DEFAULT: &str = "<To use the global Duo keys, please leave these fields untouched>";
 
-#[post("/two-factor/get-duo", data = "<data>")]
 async fn get_duo(data: JsonUpcase<PasswordData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: PasswordData = data.into_inner().data;
 
@@ -151,7 +156,6 @@ fn check_duo_fields_custom(data: &EnableDuoData) -> bool {
     !empty_or_default(&data.Host) && !empty_or_default(&data.SecretKey) && !empty_or_default(&data.IntegrationKey)
 }
 
-#[post("/two-factor/duo", data = "<data>")]
 async fn activate_duo(data: JsonUpcase<EnableDuoData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: EnableDuoData = data.into_inner().data;
     let mut user = headers.user;
@@ -184,7 +188,6 @@ async fn activate_duo(data: JsonUpcase<EnableDuoData>, headers: Headers, conn: D
     })))
 }
 
-#[put("/two-factor/duo", data = "<data>")]
 async fn activate_duo_put(data: JsonUpcase<EnableDuoData>, headers: Headers, conn: DbConn) -> JsonResult {
     activate_duo(data, headers, conn).await
 }

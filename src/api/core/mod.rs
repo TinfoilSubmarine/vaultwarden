@@ -11,28 +11,32 @@ pub use emergency_access::{emergency_notification_reminder_job, emergency_reques
 pub use sends::purge_sends;
 pub use two_factor::send_incomplete_2fa_notifications;
 
-pub fn routes() -> Vec<Route> {
-    let mut mod_routes =
-        routes![clear_device_token, put_device_token, get_eq_domains, post_eq_domains, put_eq_domains, hibp_breach,];
-
-    let mut routes = Vec::new();
-    routes.append(&mut accounts::routes());
-    routes.append(&mut ciphers::routes());
-    routes.append(&mut emergency_access::routes());
-    routes.append(&mut folders::routes());
-    routes.append(&mut organizations::routes());
-    routes.append(&mut two_factor::routes());
-    routes.append(&mut sends::routes());
-    routes.append(&mut mod_routes);
-
-    routes
+pub fn routes() -> Router {
+    Router::new()
+        .merge(accounts::routes())
+        .merge(ciphers::routes())
+        .merge(emergency_access::routes())
+        .merge(folders::routes())
+        .merge(organizations::routes())
+        .merge(two_factor::routes())
+        .merge(sends::routes())
+        .merge(emergency_access::routes())
+        .mount("/devices/identifier/:uuid/clear-token", put(clear_device_token))
+        .mount("/devices/identifier/:uuid/token", put(put_device_token))
+        .mount("/settings/domains", get(get_eq_domains))
+        .mount("/settings/domains", post(post_eq_domains))
+        .mount("/settings/domains", put(put_eq_domains))
+        .mount("/hibp/breach?:username", get(hibp_breach))
 }
 
 //
 // Move this somewhere else
 //
-use rocket::serde::json::Json;
-use rocket::Route;
+use axum::{
+    Json,
+    Router,
+    routing::{put, get, post},
+};
 use serde_json::Value;
 
 use crate::{
@@ -43,7 +47,6 @@ use crate::{
     util::get_reqwest_client,
 };
 
-#[put("/devices/identifier/<uuid>/clear-token")]
 fn clear_device_token(uuid: String) -> &'static str {
     // This endpoint doesn't have auth header
 
@@ -56,7 +59,6 @@ fn clear_device_token(uuid: String) -> &'static str {
     ""
 }
 
-#[put("/devices/identifier/<uuid>/token", data = "<data>")]
 fn put_device_token(uuid: String, data: JsonUpcase<Value>, headers: Headers) -> Json<Value> {
     let _data: Value = data.into_inner().data;
     // Data has a single string value "PushToken"
@@ -84,7 +86,6 @@ struct GlobalDomain {
 
 const GLOBAL_DOMAINS: &str = include_str!("../../static/global_domains.json");
 
-#[get("/settings/domains")]
 fn get_eq_domains(headers: Headers) -> Json<Value> {
     _get_eq_domains(headers, false)
 }
@@ -120,7 +121,6 @@ struct EquivDomainData {
     EquivalentDomains: Option<Vec<Vec<String>>>,
 }
 
-#[post("/settings/domains", data = "<data>")]
 async fn post_eq_domains(data: JsonUpcase<EquivDomainData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: EquivDomainData = data.into_inner().data;
 
@@ -138,12 +138,10 @@ async fn post_eq_domains(data: JsonUpcase<EquivDomainData>, headers: Headers, co
     Ok(Json(json!({})))
 }
 
-#[put("/settings/domains", data = "<data>")]
 async fn put_eq_domains(data: JsonUpcase<EquivDomainData>, headers: Headers, conn: DbConn) -> JsonResult {
     post_eq_domains(data, headers, conn).await
 }
 
-#[get("/hibp/breach?<username>")]
 async fn hibp_breach(username: String) -> JsonResult {
     let url = format!(
         "https://haveibeenpwned.com/api/v3/breachedaccount/{}?truncateResponse=false&includeUnverified=false",

@@ -1,9 +1,12 @@
 use chrono::Utc;
 use num_traits::FromPrimitive;
-use rocket::serde::json::Json;
+use axum::{
+    Json,
+    Router,
+    routing::post,
+};
 use rocket::{
     form::{Form, FromForm},
-    Route,
 };
 use serde_json::Value;
 
@@ -18,11 +21,10 @@ use crate::{
     mail, util, CONFIG,
 };
 
-pub fn routes() -> Vec<Route> {
-    routes![login]
+pub fn routes() -> Router {
+    Router::new().route("/connect/token", post(login))
 }
 
-#[post("/connect/token", data = "<data>")]
 async fn login(data: Form<ConnectData>, conn: DbConn, ip: ClientIp) -> JsonResult {
     let data: ConnectData = data.into_inner();
 

@@ -14,6 +14,10 @@ use reqwest::{
     Client, Response,
 };
 use rocket::{http::ContentType, response::Redirect, Route};
+use axum::{
+    Router,
+    routing::get,
+};
 use tokio::{
     fs::{create_dir_all, remove_file, symlink_metadata, File},
     io::{AsyncReadExt, AsyncWriteExt},
@@ -29,13 +33,13 @@ use crate::{
     CONFIG,
 };
 
-pub fn routes() -> Vec<Route> {
+pub fn routes() -> Router {
     match CONFIG.icon_service().as_str() {
-        "internal" => routes![icon_internal],
-        "bitwarden" => routes![icon_bitwarden],
-        "duckduckgo" => routes![icon_duckduckgo],
-        "google" => routes![icon_google],
-        _ => routes![icon_custom],
+        "internal" => Router::new().route("/:domain/icon.png", get(icon_internal)),
+        "bitwarden" => Router::new().route("/:domain/icon.png", get(icon_bitwarden)),
+        "duckduckgo" => Router::new().route("/:domain/icon.png", get(icon_duckduckgo)),
+        "google" => Router::new().route("/:domain/icon.png", get(icon_google)),
+        _ => Router::new().route("/:domain/icon.png", get(icon_custom)),
     }
 }
 
@@ -101,27 +105,22 @@ async fn icon_redirect(domain: &str, template: &str) -> Option<Redirect> {
     }
 }
 
-#[get("/<domain>/icon.png")]
 async fn icon_custom(domain: String) -> Option<Redirect> {
     icon_redirect(&domain, &CONFIG.icon_service()).await
 }
 
-#[get("/<domain>/icon.png")]
 async fn icon_bitwarden(domain: String) -> Option<Redirect> {
     icon_redirect(&domain, "https://icons.bitwarden.net/{}/icon.png").await
 }
 
-#[get("/<domain>/icon.png")]
 async fn icon_duckduckgo(domain: String) -> Option<Redirect> {
     icon_redirect(&domain, "https://icons.duckduckgo.com/ip3/{}.ico").await
 }
 
-#[get("/<domain>/icon.png")]
 async fn icon_google(domain: String) -> Option<Redirect> {
     icon_redirect(&domain, "https://www.google.com/s2/favicons?domain={}&sz=32").await
 }
 
-#[get("/<domain>/icon.png")]
 async fn icon_internal(domain: String) -> Cached<(ContentType, Vec<u8>)> {
     const FALLBACK_ICON: &[u8] = include_bytes!("../static/images/fallback-icon.png");
 

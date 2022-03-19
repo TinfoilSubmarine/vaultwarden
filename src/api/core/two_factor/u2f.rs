@@ -1,6 +1,9 @@
 use once_cell::sync::Lazy;
-use rocket::serde::json::Json;
-use rocket::Route;
+use axum::{
+    Router,
+    routing::{delete, post, put},
+    Json,
+};
 use serde_json::Value;
 use u2f::{
     messages::{RegisterResponse, SignResponse, U2fSignRequest},
@@ -27,11 +30,15 @@ const U2F_VERSION: &str = "U2F_V2";
 static APP_ID: Lazy<String> = Lazy::new(|| format!("{}/app-id.json", &CONFIG.domain()));
 static U2F: Lazy<U2f> = Lazy::new(|| U2f::new(APP_ID.clone()));
 
-pub fn routes() -> Vec<Route> {
-    routes![generate_u2f, generate_u2f_challenge, activate_u2f, activate_u2f_put, delete_u2f,]
+pub fn routes() -> Router {
+    Router::new()
+        .route("/two-factor/get-u2f", post(generate_u2f))
+        .route("/two-factor/get-u2f-challenge", post(generate_u2f_challenge))
+        .route("/two-factor/u2f", post(activate_u2f))
+        .route("/two-factor/u2f", put(activate_u2f_put))
+        .route("/two-factor/u2f", delete(delete_u2f))
 }
 
-#[post("/two-factor/get-u2f", data = "<data>")]
 async fn generate_u2f(data: JsonUpcase<PasswordData>, headers: Headers, conn: DbConn) -> JsonResult {
     if !CONFIG.domain_set() {
         err!("`DOMAIN` environment variable is not set. U2F disabled")
@@ -52,7 +59,6 @@ async fn generate_u2f(data: JsonUpcase<PasswordData>, headers: Headers, conn: Db
     })))
 }
 
-#[post("/two-factor/get-u2f-challenge", data = "<data>")]
 async fn generate_u2f_challenge(data: JsonUpcase<PasswordData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: PasswordData = data.into_inner().data;
 
@@ -136,7 +142,6 @@ impl From<RegisterResponseCopy> for RegisterResponse {
     }
 }
 
-#[post("/two-factor/u2f", data = "<data>")]
 async fn activate_u2f(data: JsonUpcase<EnableU2FData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: EnableU2FData = data.into_inner().data;
     let mut user = headers.user;
@@ -188,7 +193,6 @@ async fn activate_u2f(data: JsonUpcase<EnableU2FData>, headers: Headers, conn: D
     })))
 }
 
-#[put("/two-factor/u2f", data = "<data>")]
 async fn activate_u2f_put(data: JsonUpcase<EnableU2FData>, headers: Headers, conn: DbConn) -> JsonResult {
     activate_u2f(data, headers, conn).await
 }
@@ -200,7 +204,6 @@ struct DeleteU2FData {
     MasterPasswordHash: String,
 }
 
-#[delete("/two-factor/u2f", data = "<data>")]
 async fn delete_u2f(data: JsonUpcase<DeleteU2FData>, headers: Headers, conn: DbConn) -> JsonResult {
     let data: DeleteU2FData = data.into_inner().data;
 

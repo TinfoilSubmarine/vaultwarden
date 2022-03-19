@@ -1,4 +1,8 @@
-use rocket::serde::json::Json;
+use axum::{
+    Json,
+    Router,
+    routing::{get, post, put, delete},
+};
 use serde_json::Value;
 
 use crate::{
@@ -7,11 +11,17 @@ use crate::{
     db::{models::*, DbConn},
 };
 
-pub fn routes() -> Vec<rocket::Route> {
-    routes![get_folders, get_folder, post_folders, post_folder, put_folder, delete_folder_post, delete_folder,]
+pub fn routes() -> Router {
+    Router::new()
+        .route("/folders", get(get_folders))
+        .route("/folders/:uuid", get(get_folder))
+        .route("/folders", post(post_folders))
+        .route("/folders/:uuid", post(post_folder))
+        .route("/folders/:uuid", put(put_folder))
+        .route("/folders/:uuid/delete", post(delete_folder_post))
+        .route("/folders/:uuid", delete(delete_folder))
 }
 
-#[get("/folders")]
 async fn get_folders(headers: Headers, conn: DbConn) -> Json<Value> {
     let folders = Folder::find_by_user(&headers.user.uuid, &conn).await;
     let folders_json: Vec<Value> = folders.iter().map(Folder::to_json).collect();
@@ -23,7 +33,6 @@ async fn get_folders(headers: Headers, conn: DbConn) -> Json<Value> {
     }))
 }
 
-#[get("/folders/<uuid>")]
 async fn get_folder(uuid: String, headers: Headers, conn: DbConn) -> JsonResult {
     let folder = match Folder::find_by_uuid(&uuid, &conn).await {
         Some(folder) => folder,
@@ -43,7 +52,6 @@ pub struct FolderData {
     pub Name: String,
 }
 
-#[post("/folders", data = "<data>")]
 async fn post_folders(data: JsonUpcase<FolderData>, headers: Headers, conn: DbConn, nt: Notify<'_>) -> JsonResult {
     let data: FolderData = data.into_inner().data;
 
@@ -55,7 +63,6 @@ async fn post_folders(data: JsonUpcase<FolderData>, headers: Headers, conn: DbCo
     Ok(Json(folder.to_json()))
 }
 
-#[post("/folders/<uuid>", data = "<data>")]
 async fn post_folder(
     uuid: String,
     data: JsonUpcase<FolderData>,
@@ -66,7 +73,6 @@ async fn post_folder(
     put_folder(uuid, data, headers, conn, nt).await
 }
 
-#[put("/folders/<uuid>", data = "<data>")]
 async fn put_folder(
     uuid: String,
     data: JsonUpcase<FolderData>,
@@ -93,12 +99,10 @@ async fn put_folder(
     Ok(Json(folder.to_json()))
 }
 
-#[post("/folders/<uuid>/delete")]
 async fn delete_folder_post(uuid: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> EmptyResult {
     delete_folder(uuid, headers, conn, nt).await
 }
 
-#[delete("/folders/<uuid>")]
 async fn delete_folder(uuid: String, headers: Headers, conn: DbConn, nt: Notify<'_>) -> EmptyResult {
     let folder = match Folder::find_by_uuid(&uuid, &conn).await {
         Some(folder) => folder,

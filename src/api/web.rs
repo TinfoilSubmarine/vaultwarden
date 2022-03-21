@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use rocket::{fs::NamedFile};
+use tower_http::services::ServeFile;
 use mime::Mime;
 use axum::{
     Json,
@@ -34,8 +34,8 @@ pub fn routes() -> Router {
     }
 }
 
-async fn web_index() -> Cached<Option<NamedFile>> {
-    Cached::short(NamedFile::open(Path::new(&CONFIG.web_vault_folder()).join("index.html")).await.ok(), false)
+async fn web_index() -> Cached<Option<ServeFile>> {
+    Cached::short(ServeFile::new(Path::new(&CONFIG.web_vault_folder()).join("index.html")).await.ok(), false)
 }
 
 fn app_id() -> Cached<(Mime, Json<Value>)> {
@@ -69,12 +69,12 @@ fn app_id() -> Cached<(Mime, Json<Value>)> {
     )
 }
 
-async fn web_files(p: PathBuf) -> Cached<Option<NamedFile>> {
-    Cached::long(NamedFile::open(Path::new(&CONFIG.web_vault_folder()).join(p)).await.ok(), true)
+async fn web_files(p: PathBuf) -> Cached<Option<ServeFile>> {
+    Cached::long(ServeFile::new(Path::new(&CONFIG.web_vault_folder()).join(p)).await.ok(), true)
 }
 
-async fn attachments(uuid: SafeString, file_id: SafeString) -> Option<NamedFile> {
-    NamedFile::open(Path::new(&CONFIG.attachments_folder()).join(uuid).join(file_id)).await.ok()
+async fn attachments(uuid: SafeString, file_id: SafeString) -> Option<ServeFile> {
+    ServeFile::new(Path::new(&CONFIG.attachments_folder()).join(uuid).join(file_id)).await.ok()
 }
 
 // We use DbConn here to let the alive healthcheck also verify the database connection.

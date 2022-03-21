@@ -2,7 +2,7 @@ use std::path::Path;
 
 use chrono::{DateTime, Duration, Utc};
 use rocket::form::Form;
-use rocket::fs::NamedFile;
+use tower_http::services::ServeFile;
 use rocket::fs::TempFile;
 use axum::{
     Json,
@@ -344,10 +344,10 @@ async fn post_access_file(
     })))
 }
 
-async fn download_send(send_id: SafeString, file_id: SafeString, t: String) -> Option<NamedFile> {
+async fn download_send(send_id: SafeString, file_id: SafeString, t: String) -> Option<ServeFile> {
     if let Ok(claims) = crate::auth::decode_send(&t) {
         if claims.sub == format!("{}/{}", send_id, file_id) {
-            return NamedFile::open(Path::new(&CONFIG.sends_folder()).join(send_id).join(file_id)).await.ok();
+            return ServeFile::new(Path::new(&CONFIG.sends_folder()).join(send_id).join(file_id)).await.ok();
         }
     }
     None
